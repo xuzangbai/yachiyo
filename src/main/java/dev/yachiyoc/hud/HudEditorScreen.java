@@ -16,7 +16,9 @@ import net.minecraft.text.Text;
 import org.lwjgl.glfw.GLFW;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Transparent HUD editor. The ClickGUI is closed before this screen opens, so
@@ -30,6 +32,10 @@ public final class HudEditorScreen extends Screen {
     private HudElement selected;
     private HudElement settingsTarget;
     private final List<SettingRow> settingRows = new ArrayList<>();
+    private final Map<HudElement, float[]> panelPositions = new HashMap<>();
+    private boolean draggingPanel;
+    private float panelDragOffsetX;
+    private float panelDragOffsetY;
 
     private boolean addMenuOpen;
     private float menuX;
@@ -106,14 +112,22 @@ public final class HudEditorScreen extends Screen {
             }
         }
         panelHeight = 40.0F + visible * Theme.SETTING_HEIGHT + 6.0F;
-        panelX = clamp(settingsTarget.x() + settingsTarget.width() + 8.0F,
-                8.0F, width - panelWidth - 8.0F);
-        panelY = clamp(settingsTarget.y(), 8.0F, height - panelHeight - 8.0F);
+        float[] stored = panelPositions.get(settingsTarget);
+        if (stored != null) {
+            panelX = stored[0];
+            panelY = stored[1];
+        } else {
+            panelX = settingsTarget.x() + settingsTarget.width() + 8.0F;
+            panelY = settingsTarget.y();
+        }
+        panelX = clamp(panelX, 8.0F, width - panelWidth - 8.0F);
+        panelY = clamp(panelY, 8.0F, height - panelHeight - 8.0F);
 
         Render2D.roundedBox(context, panelX, panelY, panelWidth, panelHeight, 10.0F,
                 Theme.CARD_BORDER, 0xF2141922);
         Text2D.draw(context, settingsTarget.name(), panelX + 10.0F, panelY + 9.0F,
                 Theme.TEXT, false);
+        drawDelete(context, panelX + panelWidth - 56.0F, panelY + 6.0F, mouseX, mouseY);
         drawClose(context, panelX + panelWidth - 20.0F, panelY + 6.0F, mouseX, mouseY);
 
         float rowY = panelY + 30.0F;
@@ -125,6 +139,14 @@ public final class HudEditorScreen extends Screen {
             row.render(context, mouseX, mouseY, Theme.ACCENT);
             rowY += Theme.SETTING_HEIGHT;
         }
+    }
+
+    private void drawDelete(DrawContext context, float x, float y, int mouseX, int mouseY) {
+        boolean hovered = mouseX >= x && mouseX <= x + 32 && mouseY >= y && mouseY <= y + 14;
+        Render2D.roundedRect(context, x, y, 32.0F, 14.0F, 4.0F,
+                hovered ? 0x44FF5A5A : 0x18FFFFFF);
+        Text2D.drawCentered(context, Text.translatable("hud.yachiyoc.delete"),
+                x + 16.0F, y + 3.0F, hovered ? 0xFFFF9A9A : Theme.TEXT_DIM, false);
     }
 
     private void drawClose(DrawContext context, float x, float y, int mouseX, int mouseY) {
@@ -178,10 +200,33 @@ public final class HudEditorScreen extends Screen {
         }
 
         if (settingsTarget != null) {
+            float deleteX = panelX + panelWidth - 56.0F;
+            if (click.x() >= deleteX && click.x() <= deleteX + 32
+                    && click.y() >= panelY + 6 && click.y() <= panelY + 20) {
+                HudElement removed = settingsTarget;
+                HudManager.remove(removed);
+                panelPositions.remove(removed);
+                if (selected == removed) {
+                    selected = null;
+                }
+                settingsTarget = null;
+                settingRows.clear();
+                draggingPanel = false;
+                save();
+                return true;
+            }
             float closeX = panelX + panelWidth - 20.0F;
             if (click.x() >= closeX && click.x() <= closeX + 14
                     && click.y() >= panelY + 6 && click.y() <= panelY + 20) {
                 settingsTarget = null;
+                draggingPanel = false;
+                return true;
+            }
+            if (click.x() >= panelX && click.x() <= panelX + panelWidth
+                    && click.y() >= panelY && click.y() <= panelY + 24) {
+                draggingPanel = true;
+                panelDragOffsetX = (float) click.x() - panelX;
+                panelDragOffsetY = (float) click.y() - panelY;
                 return true;
             }
             for (SettingRow row : settingRows) {
@@ -229,6 +274,12 @@ public final class HudEditorScreen extends Screen {
 
     @Override
     public boolean mouseDragged(Click click, double deltaX, double deltaY) {
+        if (draggingPanel && settingsTarget != null) {
+            panelX = clamp((float) click.x() - panelDragOffsetX, 8.0F, width - panelWidth - 8.0F);
+            panelY = clamp((float) click.y() - panelDragOffsetY, 8.0F, height - panelHeight - 8.0F);
+            panelPositions.put(settingsTarget, new float[]{panelX, panelY});
+            return true;
+        }
         if (settingsTarget != null) {
             for (SettingRow row : settingRows) {
                 if (row.mouseDragged(click, deltaX, deltaY)) {
@@ -248,6 +299,11 @@ public final class HudEditorScreen extends Screen {
     public boolean mouseReleased(Click click) {
         for (SettingRow row : settingRows) {
             row.mouseReleased(click);
+        }
+        if (draggingPanel) {
+            draggingPanel = false;
+            save();
+            return true;
         }
         if (settingsTarget != null) {
             save();

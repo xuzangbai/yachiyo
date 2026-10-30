@@ -12,7 +12,10 @@ import dev.yachiyoc.ui.render.Text2D;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.entity.Entity;
+import net.minecraft.entity.EntityType;
 import net.minecraft.entity.ItemEntity;
+import net.minecraft.entity.LivingEntity;
+import net.minecraft.entity.mob.MobEntity;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.item.ItemStack;
 import net.minecraft.registry.Registries;
@@ -31,7 +34,7 @@ import java.util.Map;
  */
 public final class DropDisplayHud extends HudElement {
     private final DoubleSetting range =
-            add(new DoubleSetting("hud.drop_display", "range", 48.0, 8.0, 128.0, 1.0));
+            add(new DoubleSetting("hud.drop_display", "range", 512.0, 8.0, 512.0, 1.0, true));
     private final BoolSetting showItems =
             add(new BoolSetting("hud.drop_display", "show_items", true));
     private final BoolSetting showEntities =
@@ -39,9 +42,9 @@ public final class DropDisplayHud extends HudElement {
     private final BoolSetting showPlayers =
             add(new BoolSetting("hud.drop_display", "show_players", false));
     private final DoubleSetting maxLines =
-            add(new DoubleSetting("hud.drop_display", "max_lines", 10.0, 1.0, 20.0, 1.0));
+            add(new DoubleSetting("hud.drop_display", "max_lines", 20.0, 1.0, 20.0, 1.0));
     private final BoolSetting background =
-            add(new BoolSetting("hud.drop_display", "background", true));
+            add(new BoolSetting("hud.drop_display", "background", false));
     private final DoubleSetting scale =
             add(new DoubleSetting("hud.drop_display", "scale", 1.0, 0.5, 2.0, 0.1));
     private final RegistryListSetting watchedItems =
@@ -56,6 +59,8 @@ public final class DropDisplayHud extends HudElement {
 
     private final List<Entry> entries = new ArrayList<>();
     private final Map<String, Long> lastNotify = new HashMap<>();
+    private long lastRangeCheck;
+    private double cachedLoadedRange = 256.0;
 
     public DropDisplayHud() {
         super("drop_display");
@@ -71,7 +76,11 @@ public final class DropDisplayHud extends HudElement {
             return;
         }
 
+        if (client.options != null) {
+            range.setMax(loadedRange(client));
+        }
         double maxDistance = range.get();
+        Map<EntityType<?>, Group> groups = new HashMap<>();
         for (Entity entity : client.world.getEntities()) {
             if (entity == client.player || entity.isRemoved()) {
                 continue;
@@ -86,13 +95,32 @@ public final class DropDisplayHud extends HudElement {
                 }
                 String id = Registries.ITEM.getId(item.getStack().getItem()).toString();
                 entries.add(new Entry(item.getStack().getName().getString(), item.getStack(),
-                        distance, watchedItems.contains(id)));
-            } else if (showEntities.get()) {
-                if (entity instanceof PlayerEntity && !showPlayers.get()) {
+                        distance, watchedItems.contains(id), item.getStack().getCount()));
+            } else if (entity instanceof PlayerEntity) {
+                if (showEntities.get() && showPlayers.get()) {
+                    entries.add(new Entry(entity.getName().getString(), ItemStack.EMPTY,
+                            distance, false, 1));
+                }
+            } else if (entity instanceof MobEntity mob) {
+                if (!showEntities.get()) {
                     continue;
                 }
-                entries.add(new Entry(entity.getName().getString(), ItemStack.EMPTY, distance, false));
+                // Animals / monsters are merged by entity type; players stay individual.
+                groups.computeIfAbsent(mob.getType(), type -> new Group())
+                        .add(distance);
+            } else if (entity instanceof LivingEntity) {
+                if (showEntities.get()) {
+                    entries.add(new Entry(entity.getName().getString(), ItemStack.EMPTY,
+                            distance, false, 1));
+                }
+            } else if (showEntities.get()) {
+                entries.add(new Entry(entity.getName().getString(), ItemStack.EMPTY,
+                        distance, false, 1));
             }
+        }
+        for (Map.Entry<EntityType<?>, Group> group : groups.entrySet()) {
+            entries.add(new Entry(group.getKey().getName().getString(), ItemStack.EMPTY,
+                    group.getValue().distance, false, group.getValue().count));
         }
 
         entries.sort(Comparator.comparing((Entry entry) -> !entry.watched())
@@ -106,11 +134,44 @@ public final class DropDisplayHud extends HudElement {
         float s = scale.get().floatValue();
         float textWidth = 80.0F;
         for (Entry entry : entries) {
-            String label = entry.label() + (entry.stack().getCount() > 1 ? " x" + entry.stack().getCount() : "");
-            textWidth = Math.max(textWidth, Text2D.width(Text.literal(label)));
+            textWidth = Math.max(textWidth, Text2D.width(Text.literal(entryLabel(entry))));
         }
         width = Math.max(170.0F, textWidth + 58.0F) * s;
         height = Math.max(24.0F, entries.size() * 18.0F + 8.0F) * s;
+    }
+
+    /**
+     * Actual loaded chunk radius around the player, not the client render
+     * distance option. Server view distance is normally smaller, so using the
+     * loaded chunks avoids showing "256m" when only 8-10 chunks are loaded.
+     */
+    private double loadedRange(MinecraftClient client) {
+        if (client.options == null || client.world == null || client.player == null) {
+            return cachedLoadedRange;
+        }
+        long now = System.currentTimeMillis();
+        if (now - lastRangeCheck < 500L) {
+            return cachedLoadedRange;
+        }
+        lastRangeCheck = now;
+
+        int view = Math.max(2, client.options.getClampedViewDistance());
+        int chunkX = client.player.getBlockX() >> 4;
+        int chunkZ = client.player.getBlockZ() >> 4;
+        int radius = 0;
+        for (int r = 1; r <= view; r++) {
+            if (client.world.isChunkLoaded(chunkX + r, chunkZ)
+                    || client.world.isChunkLoaded(chunkX - r, chunkZ)
+                    || client.world.isChunkLoaded(chunkX, chunkZ + r)
+                    || client.world.isChunkLoaded(chunkX, chunkZ - r)) {
+                radius = r;
+            }
+        }
+        if (radius == 0) {
+            radius = view;
+        }
+        cachedLoadedRange = Math.max(32.0, radius * 16.0);
+        return cachedLoadedRange;
     }
 
     private void notifyWatched() {
@@ -130,12 +191,16 @@ public final class DropDisplayHud extends HudElement {
             lastNotify.put(id, now);
             if (notifyChat.get()) {
                 Chat.info(Text.translatable("hud.yachiyoc.drop_display.found",
-                        entry.label(), entry.stack().getCount(), Math.round(entry.distance())));
+                        entry.label(), entry.count(), Math.round(entry.distance())));
             }
             if (notifySound.get()) {
                 SoundPlayer.play(sound.get());
             }
         }
+    }
+
+    private static String entryLabel(Entry entry) {
+        return entry.count() > 1 ? entry.label() + " x" + entry.count() : entry.label();
     }
 
     @Override
@@ -170,8 +235,8 @@ public final class DropDisplayHud extends HudElement {
                 textX = x + 18.0F * s;
             }
 
-            String label = entry.label() + (entry.stack().getCount() > 1 ? " x" + entry.stack().getCount() : "");
-            Text shown = Text2D.trim(Text.literal(label), (int) ((width / s) - 48.0F));
+            Text shown = Text2D.trim(Text.literal(entryLabel(entry)),
+                    (int) ((width / s) - 48.0F));
             Text2D.drawScaled(context, shown, textX, rowY + 4.0F * s, s,
                     entry.watched() ? 0xFFFF5A5A : 0xFFF3F5F8, false);
             Text distance = Text.literal(Math.round(entry.distance()) + "m");
@@ -182,6 +247,16 @@ public final class DropDisplayHud extends HudElement {
         }
     }
 
-    private record Entry(String label, ItemStack stack, double distance, boolean watched) {
+    private static final class Group {
+        private int count;
+        private double distance = Double.MAX_VALUE;
+
+        private void add(double entityDistance) {
+            count++;
+            distance = Math.min(distance, entityDistance);
+        }
+    }
+
+    private record Entry(String label, ItemStack stack, double distance, boolean watched, int count) {
     }
 }

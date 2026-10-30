@@ -19,7 +19,7 @@ public final class ItemDisplayHud extends HudElement {
     private static final int PAD = 4;
 
     private final BoolSetting background =
-            add(new BoolSetting("hud.item_display", "background", true));
+            add(new BoolSetting("hud.item_display", "background", false));
     private final DoubleSetting scale =
             add(new DoubleSetting("hud.item_display", "scale", 1.0, 0.5, 2.5, 0.1));
     private final ColorSetting backgroundColor =

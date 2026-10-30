@@ -56,6 +56,7 @@
   "hud.yachiyoc.editor.short": "HUD",
   "hud.yachiyoc.editor.description": "添加、移动并配置 HUD 元素",
   "hud.yachiyoc.hint": "右键：添加 / 设置 · 左键拖动：移动 · ESC：退出",
+  "hud.yachiyoc.delete": "删除",
   "hud.yachiyoc.add": "添加 HUD 元素",
   "hud.yachiyoc.item_display": "物品显示",
   "hud.yachiyoc.item_display.description": "以 9x3 物品格显示主背包内容。",

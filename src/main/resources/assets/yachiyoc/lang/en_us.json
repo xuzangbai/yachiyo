@@ -56,6 +56,7 @@
   "hud.yachiyoc.editor.short": "HUD",
   "hud.yachiyoc.editor.description": "Add, move and configure HUD elements",
   "hud.yachiyoc.hint": "Right-click: add / settings · Left-drag: move · ESC: exit",
+  "hud.yachiyoc.delete": "Delete",
   "hud.yachiyoc.add": "Add HUD element",
   "hud.yachiyoc.item_display": "Item Display",
   "hud.yachiyoc.item_display.description": "Shows the main inventory as a 9x3 item grid.",

@@ -8,15 +8,31 @@ import java.util.Locale;
 
 public final class DoubleSetting extends Setting<Double> {
     private final double min;
-    private final double max;
+    private double max;
     private final double step;
 
     public DoubleSetting(String owner, String id, double defaultValue, double min, double max, double step) {
+        this(owner, id, defaultValue, min, max, step, false);
+    }
+
+    /**
+     * @param defaultAtMax when true the default value follows the current max;
+     *                     used by the drop range so it starts at the full loaded range.
+     */
+    public DoubleSetting(String owner, String id, double defaultValue, double min, double max,
+                         double step, boolean defaultAtMax) {
         super(owner, id, defaultValue);
         this.min = min;
         this.max = max;
         this.step = step <= 0.0 ? 0.01 : step;
-        this.value = normalize(defaultValue);
+        this.value = defaultAtMax ? max : normalize(defaultValue);
+    }
+
+    public void setMax(double newMax) {
+        double clampedMax = Math.max(min, newMax);
+        boolean wasAtMax = Math.abs(value - max) < 1.0E-6;
+        max = clampedMax;
+        value = wasAtMax ? max : normalize(value);
     }
 
     public double min() {
