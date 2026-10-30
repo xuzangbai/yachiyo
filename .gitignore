@@ -1,0 +1,12 @@
+# Gradle
+.gradle/
+build/
+
+# Development runtime (assets, logs, worlds, local config)
+run/
+*.log
+*.tmp
+
+# Local test captures
+ui-*.png
+server-*.jar

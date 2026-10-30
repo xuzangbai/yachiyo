@@ -1,0 +1,72 @@
+plugins {
+    id 'fabric-loom' version "${loom_version}"
+    id 'maven-publish'
+}
+
+version = project.mod_version
+group = project.maven_group
+
+base {
+    archivesName = project.archives_base_name
+}
+
+repositories {
+    mavenCentral()
+    maven { url = 'https://maven.fabricmc.net/' }
+}
+
+dependencies {
+    minecraft "com.mojang:minecraft:${project.minecraft_version}"
+    mappings "net.fabricmc:yarn:${project.yarn_mappings}:v2"
+    modImplementation "net.fabricmc:fabric-loader:${project.loader_version}"
+    modImplementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_version}"
+}
+
+def soundDir = file('src/main/resources/assets/yachiyoc/textures/sounds')
+def soundNames = soundDir.exists()
+        ? soundDir.listFiles().findAll { it.name.endsWith('.ogg') }.collect { it.name.substring(0, it.name.length() - 4) }.sort()
+        : []
+
+processResources {
+    inputs.property 'version', project.version
+    outputs.file(layout.buildDirectory.file('resources/main/assets/yachiyoc/sounds.json'))
+    outputs.file(layout.buildDirectory.file('resources/main/assets/yachiyoc/sound_list.txt'))
+
+    filesMatching('fabric.mod.json') {
+        expand 'version': project.version
+    }
+
+    // Custom UI sounds live in textures/sounds for editing convenience, but
+    // Minecraft only resolves SoundEvents from assets/<ns>/sounds/ + sounds.json.
+    from(soundDir) {
+        include '*.ogg'
+        into 'assets/yachiyoc/sounds'
+    }
+
+    doLast {
+        def json = [:]
+        soundNames.each { name ->
+            json[name] = [sounds: [[name: "yachiyoc:${name}".toString(), stream: true]]]
+        }
+        def target = new File(destinationDir, 'assets/yachiyoc/sounds.json')
+        target.parentFile.mkdirs()
+        target.text = groovy.json.JsonOutput.toJson(json)
+
+        def list = new File(destinationDir, 'assets/yachiyoc/sound_list.txt')
+        list.text = soundNames.collect { it + '.ogg' }.join('\n')
+    }
+}
+
+tasks.withType(JavaCompile).configureEach {
+    it.options.release = 21
+    it.options.encoding = 'UTF-8'
+}
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(21)
+    }
+    sourceCompatibility = JavaVersion.VERSION_21
+    targetCompatibility = JavaVersion.VERSION_21
+    withSourcesJar()
+}

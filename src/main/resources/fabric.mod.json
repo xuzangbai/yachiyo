@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "id": "yachiyoc",
+  "version": "${version}",
+  "name": "YachiyoC",
+  "description": "A modular utility client for Minecraft anarchy survival. UI shell / foundation build.",
+  "authors": [
+    "YachiyoC"
+  ],
+  "license": "MIT",
+  "environment": "client",
+  "entrypoints": {
+    "client": [
+      "dev.yachiyoc.YachiyoC"
+    ]
+  },
+  "depends": {
+    "fabricloader": ">=0.18.0",
+    "minecraft": ">=1.21.11 <1.22",
+    "java": ">=21",
+    "fabric-api": "*"
+  }
+}
