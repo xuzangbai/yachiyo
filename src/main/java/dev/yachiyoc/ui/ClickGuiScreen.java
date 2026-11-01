@@ -13,8 +13,10 @@ import dev.yachiyoc.ui.render.UiTextures;
 import dev.yachiyoc.ui.render.Render2D;
 import dev.yachiyoc.ui.render.Text2D;
 import dev.yachiyoc.ui.widget.CategoryTab;
+import dev.yachiyoc.ui.widget.ColorPickerPopup;
 import dev.yachiyoc.ui.widget.HudRailButton;
 import dev.yachiyoc.ui.widget.ModuleCard;
+import dev.yachiyoc.ui.widget.ModuleSettingsWindow;
 import dev.yachiyoc.ui.widget.SearchField;
 import net.minecraft.client.gui.Click;
 import net.minecraft.client.gui.DrawContext;
@@ -40,6 +42,7 @@ public final class ClickGuiScreen extends Screen {
     private final Map<ModuleCategory, List<ModuleCard>> cardsByCategory = new LinkedHashMap<>();
     private final List<ModuleCard> visibleCards = new ArrayList<>();
     private final HudRailButton hudRail = new HudRailButton();
+    private ModuleSettingsWindow moduleWindow;
     private final Anim open = new Anim(0.0F, 300L, Easing.OUT_QUINT);
     private final Anim switchAnim = new Anim(1.0F, 260L, Easing.OUT_QUINT);
     private final Anim railY = new Anim(0.0F, 200L, Easing.OUT_QUINT);
@@ -147,11 +150,9 @@ public final class ClickGuiScreen extends Screen {
                 railHeight.set(Theme.TAB_HEIGHT);
             }
             tabY += Theme.TAB_HEIGHT + Theme.TAB_GAP;
-            if (tab.category() == ModuleCategory.RENDER) {
-                hudRail.setBounds(tabX, tabY, tabWidth, Theme.TAB_HEIGHT);
-                tabY += Theme.TAB_HEIGHT + Theme.TAB_GAP;
-            }
         }
+        // HUD editor is the last rail entry, after all module categories.
+        hudRail.setBounds(tabX, tabY, tabWidth, Theme.TAB_HEIGHT);
 
         List<ModuleCard> filtered = visibleCards.stream().filter(card -> search.matches(card.module())).toList();
         float total = 0.0F;
@@ -186,23 +187,29 @@ public final class ClickGuiScreen extends Screen {
 
         // window
         Render2D.roundedRect(ctx, windowX + 2.0F, windowY + 5.0F, windowWidth, windowHeight,
-                Theme.WINDOW_RADIUS, 0x66000000);
+                Theme.WINDOW_RADIUS, Theme.SHADOW);
         Render2D.roundedBox(ctx, windowX, windowY, windowWidth, windowHeight,
                 Theme.WINDOW_RADIUS, Theme.WINDOW_BORDER, Theme.WINDOW);
 
         // header logo
         float logoHeight = 36.0F;
         float logoWidth = 117.0F;
-        Identifier logo = UiTextures.logo();
-        if (logo != null) {
-            Render2D.texture(ctx, logo, windowX + Theme.PADDING, windowY + 16.0F,
+        Identifier logoMask = UiTextures.logoMask();
+        if (logoMask != null) {
+            Render2D.invertTexture(ctx, logoMask, windowX + Theme.PADDING, windowY + 16.0F,
                     logoWidth, logoHeight, 720, 221);
+        } else {
+            Identifier logo = UiTextures.logo();
+            if (logo != null) {
+                Render2D.texture(ctx, logo, windowX + Theme.PADDING, windowY + 16.0F,
+                        logoWidth, logoHeight, 720, 221);
+            }
         }
         Text2D.draw(ctx, Text.literal("v" + YachiyoC.version()),
                 windowX + Theme.PADDING + logoWidth + 10.0F, windowY + 30.0F,
                 Theme.TEXT_MUTED, false);
         Render2D.horizontalLine(ctx, windowX + Theme.PADDING, windowY + Theme.HEADER_HEIGHT - 1.0F,
-                windowWidth - Theme.PADDING * 2.0F, 0x1AFFFFFF);
+                windowWidth - Theme.PADDING * 2.0F, Theme.SEPARATOR);
 
         float closeSize = 22.0F;
         float closeX = windowX + windowWidth - Theme.PADDING - closeSize;
@@ -267,7 +274,7 @@ public final class ClickGuiScreen extends Screen {
 
         // footer
         Render2D.horizontalLine(ctx, windowX + Theme.PADDING, windowY + windowHeight - 24.0F,
-                windowWidth - Theme.PADDING * 2.0F, 0x1AFFFFFF);
+                windowWidth - Theme.PADDING * 2.0F, Theme.SEPARATOR);
         Text openText = Text.translatable("ui.yachiyoc.open",
                 Keybinds.label(), YachiyoC.prefix() + "clickgui").formatted(Formatting.DARK_GRAY);
         Text2D.draw(ctx, openText, windowX + Theme.PADDING, windowY + windowHeight - 17.0F,
@@ -276,12 +283,35 @@ public final class ClickGuiScreen extends Screen {
                 .formatted(Formatting.DARK_GRAY);
         Text2D.drawRight(ctx, count, windowX + windowWidth - Theme.PADDING,
                 windowY + windowHeight - 17.0F, Theme.TEXT_MUTED, false);
+        if (moduleWindow != null) {
+            moduleWindow.render(ctx, mouseX, mouseY, width, height);
+        }
+        ColorPickerPopup.render(ctx, mouseX, mouseY);
         SoundSetting.renderOpen(ctx, mouseX, mouseY, width, height);
+    }
+
+    private void openModuleWindow(Module module, Click click) {
+        if (moduleWindow != null) {
+            moduleWindow.cancelListening();
+        }
+        moduleWindow = new ModuleSettingsWindow(module,
+                (float) click.x() + 10.0F, (float) click.y() + 8.0F);
     }
 
     @Override
     public boolean mouseClicked(Click click, boolean doubled) {
+        if (ColorPickerPopup.mouseClicked(click)) {
+            return true;
+        }
         if (SoundSetting.mouseClickedOpen(click, width, height)) {
+            return true;
+        }
+        if (moduleWindow != null && moduleWindow.mouseClicked(click, width, height)) {
+            if (moduleWindow.closeRequested()) {
+                moduleWindow.cancelListening();
+                moduleWindow = null;
+                YachiyoC.config().save();
+            }
             return true;
         }
         StringSetting.stopAllEditing();
@@ -292,11 +322,6 @@ public final class ClickGuiScreen extends Screen {
                 && click.y() >= closeY && click.y() <= closeY + closeSize) {
             close();
             return true;
-        }
-        for (List<ModuleCard> cards : cardsByCategory.values()) {
-            for (ModuleCard card : cards) {
-                card.cancelListening();
-            }
         }
         if (search.mouseClicked(click)) {
             return true;
@@ -322,7 +347,14 @@ public final class ClickGuiScreen extends Screen {
                 && click.y() >= cardsY && click.y() <= cardsY + cardsHeight) {
             for (int i = visibleCards.size() - 1; i >= 0; i--) {
                 ModuleCard card = visibleCards.get(i);
-                if (search.matches(card.module()) && card.mouseClicked(click)) {
+                if (!search.matches(card.module()) || !card.contains(click.x(), click.y())) {
+                    continue;
+                }
+                if (click.button() == 1 || !card.module().toggleable()) {
+                    openModuleWindow(card.module(), click);
+                    return true;
+                }
+                if (card.mouseClicked(click)) {
                     return true;
                 }
             }
@@ -332,24 +364,31 @@ public final class ClickGuiScreen extends Screen {
 
     @Override
     public boolean mouseDragged(Click click, double deltaX, double deltaY) {
-        for (ModuleCard card : visibleCards) {
-            if (card.mouseDragged(click, deltaX, deltaY)) {
-                return true;
-            }
+        if (ColorPickerPopup.mouseDragged(click)) {
+            return true;
+        }
+        if (moduleWindow != null && moduleWindow.mouseDragged(click, deltaX, deltaY)) {
+            return true;
         }
         return false;
     }
 
     @Override
     public boolean mouseReleased(Click click) {
-        for (ModuleCard card : visibleCards) {
-            card.mouseReleased(click);
+        if (ColorPickerPopup.mouseReleased(click)) {
+            return true;
+        }
+        if (moduleWindow != null && moduleWindow.mouseReleased(click)) {
+            YachiyoC.config().save();
         }
         return true;
     }
 
     @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double horizontalAmount, double verticalAmount) {
+        if (moduleWindow != null && moduleWindow.mouseScrolled(mouseX, mouseY, verticalAmount)) {
+            return true;
+        }
         if (mouseX >= sidebarX && mouseX <= sidebarX + sidebarWidth
                 && mouseY >= sidebarY && mouseY <= sidebarY + sidebarHeight) {
             sidebarScroll -= (float) verticalAmount * 20.0F;
@@ -376,13 +415,16 @@ public final class ClickGuiScreen extends Screen {
             }
             return true;
         }
+        if (moduleWindow != null && moduleWindow.keyPressed(input)) {
+            return true;
+        }
         if (search.focused() && search.keyPressed(input)) {
             return true;
         }
-        for (ModuleCard card : visibleCards) {
-            if (card.keyPressed(input)) {
-                return true;
-            }
+        if (input.key() == GLFW.GLFW_KEY_ESCAPE && moduleWindow != null) {
+            moduleWindow.cancelListening();
+            moduleWindow = null;
+            return true;
         }
         if (input.key() == GLFW.GLFW_KEY_ESCAPE || input.key() == Keybinds.code()) {
             close();
@@ -410,6 +452,10 @@ public final class ClickGuiScreen extends Screen {
     public void removed() {
         SoundSetting.closeOpen();
         StringSetting.stopAllEditing();
+        if (moduleWindow != null) {
+            moduleWindow.cancelListening();
+        }
+        ColorPickerPopup.close();
         saveLayout();
         super.removed();
     }

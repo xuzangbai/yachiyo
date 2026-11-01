@@ -6,6 +6,7 @@ import dev.yachiyoc.module.setting.StringSetting;
 import dev.yachiyoc.ui.Theme;
 import dev.yachiyoc.ui.render.Render2D;
 import dev.yachiyoc.ui.render.Text2D;
+import dev.yachiyoc.ui.widget.ColorPickerPopup;
 import dev.yachiyoc.ui.widget.SettingRow;
 import net.minecraft.client.gui.Click;
 import net.minecraft.client.gui.DrawContext;
@@ -62,7 +63,7 @@ public final class HudEditorScreen extends Screen {
         // editor only adds outlines, the add menu and the settings panel.
         HudManager.renderEditorOverlay(context, mouseX, mouseY, selected);
 
-        Render2D.roundedRect(context, 10.0F, 10.0F, 270.0F, 30.0F, 8.0F, 0xB810141C);
+        Render2D.roundedRect(context, 10.0F, 10.0F, 270.0F, 30.0F, 8.0F, Render2D.withAlpha(Theme.WINDOW, 0.92F));
         Text2D.draw(context, Text.translatable("hud.yachiyoc.editor"), 20.0F, 16.0F,
                 Theme.TEXT, false);
         Text2D.draw(context, Text.translatable("hud.yachiyoc.hint"), 20.0F, 28.0F,
@@ -74,6 +75,7 @@ public final class HudEditorScreen extends Screen {
         if (settingsTarget != null) {
             renderSettings(context, mouseX, mouseY);
         }
+        ColorPickerPopup.render(context, mouseX, mouseY);
         SoundSetting.renderOpen(context, mouseX, mouseY, width, height);
     }
 
@@ -84,7 +86,7 @@ public final class HudEditorScreen extends Screen {
         float x = clamp(menuX, 8.0F, width - w - 8.0F);
         float y = clamp(menuY, 8.0F, height - h - 8.0F);
 
-        Render2D.roundedBox(context, x, y, w, h, 10.0F, Theme.CARD_BORDER, 0xF2141922);
+        Render2D.roundedBox(context, x, y, w, h, 10.0F, Theme.CARD_BORDER, Theme.WINDOW);
         Text2D.draw(context, Text.translatable("hud.yachiyoc.add"), x + 10.0F, y + 9.0F,
                 Theme.TEXT_DIM, false);
 
@@ -124,7 +126,7 @@ public final class HudEditorScreen extends Screen {
         panelY = clamp(panelY, 8.0F, height - panelHeight - 8.0F);
 
         Render2D.roundedBox(context, panelX, panelY, panelWidth, panelHeight, 10.0F,
-                Theme.CARD_BORDER, 0xF2141922);
+                Theme.CARD_BORDER, Theme.WINDOW);
         Text2D.draw(context, settingsTarget.name(), panelX + 10.0F, panelY + 9.0F,
                 Theme.TEXT, false);
         drawDelete(context, panelX + panelWidth - 56.0F, panelY + 6.0F, mouseX, mouseY);
@@ -144,7 +146,7 @@ public final class HudEditorScreen extends Screen {
     private void drawDelete(DrawContext context, float x, float y, int mouseX, int mouseY) {
         boolean hovered = mouseX >= x && mouseX <= x + 32 && mouseY >= y && mouseY <= y + 14;
         Render2D.roundedRect(context, x, y, 32.0F, 14.0F, 4.0F,
-                hovered ? 0x44FF5A5A : 0x18FFFFFF);
+                hovered ? 0x44FF5A5A : Render2D.withAlpha(Theme.TEXT, 0.08F));
         Text2D.drawCentered(context, Text.translatable("hud.yachiyoc.delete"),
                 x + 16.0F, y + 3.0F, hovered ? 0xFFFF9A9A : Theme.TEXT_DIM, false);
     }
@@ -152,7 +154,7 @@ public final class HudEditorScreen extends Screen {
     private void drawClose(DrawContext context, float x, float y, int mouseX, int mouseY) {
         boolean hovered = mouseX >= x && mouseX <= x + 14 && mouseY >= y && mouseY <= y + 14;
         Render2D.roundedRect(context, x, y, 14.0F, 14.0F, 4.0F,
-                hovered ? 0x44FF5A5A : 0x18FFFFFF);
+                hovered ? 0x44FF5A5A : Render2D.withAlpha(Theme.TEXT, 0.08F));
         for (int i = 0; i < 6; i++) {
             Render2D.fill(context, x + 4 + i, y + 4 + i, 1.0F, 1.0F, Theme.TEXT_DIM);
             Render2D.fill(context, x + 9 - i, y + 4 + i, 1.0F, 1.0F, Theme.TEXT_DIM);
@@ -162,6 +164,10 @@ public final class HudEditorScreen extends Screen {
     @Override
     public boolean mouseClicked(Click click, boolean doubled) {
         if (System.currentTimeMillis() - openedAt < 180L) {
+            return true;
+        }
+        if (ColorPickerPopup.mouseClicked(click)) {
+            save();
             return true;
         }
         if (SoundSetting.mouseClickedOpen(click, width, height)) {
@@ -274,6 +280,9 @@ public final class HudEditorScreen extends Screen {
 
     @Override
     public boolean mouseDragged(Click click, double deltaX, double deltaY) {
+        if (ColorPickerPopup.mouseDragged(click)) {
+            return true;
+        }
         if (draggingPanel && settingsTarget != null) {
             panelX = clamp((float) click.x() - panelDragOffsetX, 8.0F, width - panelWidth - 8.0F);
             panelY = clamp((float) click.y() - panelDragOffsetY, 8.0F, height - panelHeight - 8.0F);
@@ -297,6 +306,10 @@ public final class HudEditorScreen extends Screen {
 
     @Override
     public boolean mouseReleased(Click click) {
+        if (ColorPickerPopup.mouseReleased(click)) {
+            save();
+            return true;
+        }
         for (SettingRow row : settingRows) {
             row.mouseReleased(click);
         }
@@ -361,6 +374,7 @@ public final class HudEditorScreen extends Screen {
     public void removed() {
         SoundSetting.closeOpen();
         StringSetting.stopAllEditing();
+        ColorPickerPopup.close();
         save();
         super.removed();
     }

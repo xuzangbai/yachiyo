@@ -40,7 +40,9 @@ public final class DropDisplayHud extends HudElement {
     private final BoolSetting showEntities =
             add(new BoolSetting("hud.drop_display", "show_entities", true));
     private final BoolSetting showPlayers =
-            add(new BoolSetting("hud.drop_display", "show_players", false));
+            add(new BoolSetting("hud.drop_display", "show_players", true));
+    private final BoolSetting pinPlayers =
+            add(new BoolSetting("hud.drop_display", "pin_players", true));
     private final DoubleSetting maxLines =
             add(new DoubleSetting("hud.drop_display", "max_lines", 20.0, 1.0, 20.0, 1.0));
     private final BoolSetting background =
@@ -64,6 +66,7 @@ public final class DropDisplayHud extends HudElement {
 
     public DropDisplayHud() {
         super("drop_display");
+        pinPlayers.visibleWhen(showPlayers::get);
     }
 
     @Override
@@ -95,11 +98,11 @@ public final class DropDisplayHud extends HudElement {
                 }
                 String id = Registries.ITEM.getId(item.getStack().getItem()).toString();
                 entries.add(new Entry(item.getStack().getName().getString(), item.getStack(),
-                        distance, watchedItems.contains(id), item.getStack().getCount()));
+                        distance, watchedItems.contains(id), item.getStack().getCount(), false, false));
             } else if (entity instanceof PlayerEntity) {
                 if (showEntities.get() && showPlayers.get()) {
                     entries.add(new Entry(entity.getName().getString(), ItemStack.EMPTY,
-                            distance, false, 1));
+                            distance, false, 1, true, true));
                 }
             } else if (entity instanceof MobEntity mob) {
                 if (!showEntities.get()) {
@@ -111,19 +114,20 @@ public final class DropDisplayHud extends HudElement {
             } else if (entity instanceof LivingEntity) {
                 if (showEntities.get()) {
                     entries.add(new Entry(entity.getName().getString(), ItemStack.EMPTY,
-                            distance, false, 1));
+                            distance, false, 1, false, false));
                 }
             } else if (showEntities.get()) {
                 entries.add(new Entry(entity.getName().getString(), ItemStack.EMPTY,
-                        distance, false, 1));
+                        distance, false, 1, false, false));
             }
         }
         for (Map.Entry<EntityType<?>, Group> group : groups.entrySet()) {
             entries.add(new Entry(group.getKey().getName().getString(), ItemStack.EMPTY,
-                    group.getValue().distance, false, group.getValue().count));
+                    group.getValue().distance, false, group.getValue().count, false, false));
         }
 
         entries.sort(Comparator.comparing((Entry entry) -> !entry.watched())
+                .thenComparing((Entry entry) -> !(pinPlayers.get() && entry.player()))
                 .thenComparingDouble(Entry::distance));
         notifyWatched();
         int limit = Math.max(1, (int) maxLines.get().doubleValue());
@@ -237,13 +241,14 @@ public final class DropDisplayHud extends HudElement {
 
             Text shown = Text2D.trim(Text.literal(entryLabel(entry)),
                     (int) ((width / s) - 48.0F));
+            boolean highlighted = entry.watched() || entry.red();
             Text2D.drawScaled(context, shown, textX, rowY + 4.0F * s, s,
-                    entry.watched() ? 0xFFFF5A5A : 0xFFF3F5F8, false);
+                    highlighted ? 0xFFFF5A5A : 0xFFF3F5F8, false);
             Text distance = Text.literal(Math.round(entry.distance()) + "m");
             float distanceWidth = Text2D.width(distance) * s * 0.9F;
             Text2D.drawScaled(context, distance,
                     x + width - 8.0F * s - distanceWidth, rowY + 4.0F * s, s * 0.9F,
-                    entry.watched() ? 0xFFFF8A8A : 0xFF8A909C, false);
+                    highlighted ? 0xFFFF8A8A : 0xFF8A909C, false);
         }
     }
 
@@ -257,6 +262,7 @@ public final class DropDisplayHud extends HudElement {
         }
     }
 
-    private record Entry(String label, ItemStack stack, double distance, boolean watched, int count) {
+    private record Entry(String label, ItemStack stack, double distance, boolean watched,
+                         int count, boolean red, boolean player) {
     }
 }

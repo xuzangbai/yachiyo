@@ -20,6 +20,7 @@ public final class HudManager {
     }
 
     public static void bootstrap() {
+        register(new HudType("logo", "hud.yachiyoc.logo.description", LogoHud::new));
         register(new HudType("item_display", "hud.yachiyoc.item_display.description", ItemDisplayHud::new));
         register(new HudType("drop_display", "hud.yachiyoc.drop_display.description", DropDisplayHud::new));
     }
@@ -82,6 +83,7 @@ public final class HudManager {
 
     public static void load(ConfigData data) {
         ELEMENTS.clear();
+        boolean hasLogo = data.hudElements.stream().anyMatch(entry -> "logo".equals(entry.type));
         for (ConfigData.HudData entry : data.hudElements) {
             HudType type = TYPES.get(entry.type);
             if (type == null) {
@@ -97,6 +99,12 @@ public final class HudManager {
             }
             element.layout();
             ELEMENTS.add(element);
+        }
+        if (!data.hudInitialized) {
+            data.hudInitialized = true;
+            if (!hasLogo) {
+                add("logo", 12.0F, 12.0F);
+            }
         }
     }
 

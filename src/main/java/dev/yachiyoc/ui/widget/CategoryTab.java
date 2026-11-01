@@ -57,7 +57,7 @@ public final class CategoryTab {
         hover.set(hovered ? 1.0F : 0.0F);
         float activeAmount = activeAnim.value();
 
-        int base = Render2D.withAlpha(0xFFFFFFFF, 0.04F + hover.value() * 0.04F);
+        int base = Render2D.withAlpha(Theme.TEXT, 0.04F + hover.value() * 0.04F);
         Render2D.roundedRect(ctx, x, y, width, height, Theme.SMALL_RADIUS, base);
         if (activeAmount > 0.01F) {
             Render2D.roundedRect(ctx, x, y, width, height, Theme.SMALL_RADIUS,

@@ -4,6 +4,7 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonPrimitive;
 
 import java.util.Locale;
+import java.util.function.IntConsumer;
 
 public final class ColorSetting extends Setting<Integer> {
     private static final int[] PALETTE = {
@@ -11,8 +12,26 @@ public final class ColorSetting extends Setting<Integer> {
             0xFFBA68C8, 0xFFFF8A65, 0xFF4DD0E1, 0xFFF2F2F5
     };
 
+    private final IntConsumer listener;
+
     public ColorSetting(String owner, String id, int defaultValue) {
+        this(owner, id, defaultValue, null);
+    }
+
+    public ColorSetting(String owner, String id, int defaultValue, IntConsumer listener) {
         super(owner, id, defaultValue);
+        this.listener = listener;
+        if (listener != null) {
+            listener.accept(get());
+        }
+    }
+
+    @Override
+    public void set(Integer newValue) {
+        super.set(newValue);
+        if (listener != null) {
+            listener.accept(get());
+        }
     }
 
     public void cycle() {

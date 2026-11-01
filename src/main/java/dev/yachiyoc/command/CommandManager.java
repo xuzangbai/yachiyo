@@ -153,6 +153,29 @@ public final class CommandManager {
         return List.copyOf(commands);
     }
 
+    public List<String> commandNames() {
+        return commands.stream().map(ClientCommand::name).toList();
+    }
+
+    /**
+     * Argument completions for the current commands. New commands automatically
+     * appear in the first-token completion through {@link #commandNames()}; this
+     * method can be extended with their argument suggestions.
+     */
+    public List<String> suggestionsFor(String commandName, int argIndex) {
+        if (argIndex != 0) {
+            return List.of();
+        }
+        return switch (commandName.toLowerCase(Locale.ROOT)) {
+            case "help" -> commandNames();
+            case "openkey" -> List.of("up", "down", "left", "right",
+                    "rshift", "lshift", "rctrl", "lctrl", "enter", "tab", "space");
+            case "language" -> List.of("auto", "en_us", "zh_cn");
+            case "config" -> List.of("save", "reload");
+            default -> List.of();
+        };
+    }
+
     public ClientCommand find(String name) {
         return index.get(name.toLowerCase(Locale.ROOT));
     }

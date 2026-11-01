@@ -19,6 +19,7 @@ public abstract class Module {
     private final String id;
     private final ModuleCategory category;
     private final boolean implemented;
+    private final boolean toggleable;
     private final List<Setting<?>> settings = new ArrayList<>();
     private boolean enabled;
 
@@ -31,9 +32,19 @@ public abstract class Module {
     }
 
     protected Module(String id, ModuleCategory category, boolean implemented) {
+        this(id, category, implemented, true);
+    }
+
+    protected Module(String id, ModuleCategory category, boolean implemented, boolean toggleable) {
         this.id = Objects.requireNonNull(id);
         this.category = Objects.requireNonNull(category);
         this.implemented = implemented;
+        this.toggleable = toggleable;
+        if (!toggleable) {
+            // Settings-only modules have no on/off state and no hotkey/trigger row.
+            bind.visibleWhen(() -> false);
+            trigger.visibleWhen(() -> false);
+        }
     }
 
     protected final <S extends Setting<?>> S add(S setting) {
@@ -51,6 +62,10 @@ public abstract class Module {
 
     public boolean implemented() {
         return implemented;
+    }
+
+    public boolean toggleable() {
+        return toggleable;
     }
 
     public boolean enabled() {

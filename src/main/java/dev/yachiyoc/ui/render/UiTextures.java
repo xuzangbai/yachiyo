@@ -27,6 +27,16 @@ public final class UiTextures {
         return load("logo", "/assets/yachiyoc/textures/logo/logo.png");
     }
 
+    /** White logo silhouette used by the difference/invert pipeline. */
+    public static Identifier logoMask() {
+        return load("logo_mask", "/assets/yachiyoc/textures/logo/logo_mask.png");
+    }
+
+    /** White alpha logo used by the icy glow shader. */
+    public static Identifier logoGlow() {
+        return load("logo_glow", "/assets/yachiyoc/textures/logo/logo_glow.png");
+    }
+
     /** 64x64 white rounded mask with an 18px radius, generated offline. */
     public static Identifier rounded() {
         return load("rounded", "/assets/yachiyoc/textures/ui/rounded.png");

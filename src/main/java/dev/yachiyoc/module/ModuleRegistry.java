@@ -24,7 +24,9 @@ public final class ModuleRegistry {
         register(new StubModule("autotool", ModuleCategory.PLAYER));
         register(new StubModule("scaffold", ModuleCategory.WORLD));
         register(new StubModule("hud", ModuleCategory.RENDER));
+        register(new StubModule("toolbox", ModuleCategory.TOOLS));
         register(new StubModule("config", ModuleCategory.CLIENT));
+        register(new ColorsModule());
         register(new ExampleModule());
     }
 

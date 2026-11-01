@@ -13,10 +13,19 @@ import java.util.List;
  */
 public final class RegistryListSetting extends Setting<List<String>> {
     private final RegistryKind kind;
+    private final List<String> defaults;
 
     public RegistryListSetting(String owner, String id, RegistryKind kind, List<String> defaults) {
         super(owner, id, new ArrayList<>(defaults));
         this.kind = kind;
+        this.defaults = List.copyOf(defaults);
+    }
+
+    @Override
+    public void reset() {
+        value.clear();
+        value.addAll(defaults);
+        onChanged();
     }
 
     public RegistryKind kind() {

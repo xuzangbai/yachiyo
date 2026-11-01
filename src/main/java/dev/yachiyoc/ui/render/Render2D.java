@@ -1,10 +1,44 @@
 package dev.yachiyoc.ui.render;
 
+import com.mojang.blaze3d.pipeline.BlendFunction;
+import com.mojang.blaze3d.pipeline.RenderPipeline;
+import com.mojang.blaze3d.platform.DepthTestFunction;
+import com.mojang.blaze3d.vertex.VertexFormat;
 import net.minecraft.client.gl.RenderPipelines;
+import net.minecraft.client.render.VertexFormats;
+import net.minecraft.client.gl.UniformType;
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.util.Identifier;
 
 public final class Render2D {
+    private static final RenderPipeline LOGO_INVERT = RenderPipeline.builder()
+            .withLocation(Identifier.of("yachiyoc", "pipeline/logo_invert"))
+            .withVertexShader("core/position_tex_color")
+            .withFragmentShader("core/position_tex_color")
+            .withSampler("Sampler0")
+            .withUniform("DynamicTransforms", UniformType.UNIFORM_BUFFER)
+            .withUniform("Projection", UniformType.UNIFORM_BUFFER)
+            .withBlend(BlendFunction.INVERT)
+            .withVertexFormat(VertexFormats.POSITION_TEXTURE_COLOR, VertexFormat.DrawMode.QUADS)
+            .withDepthTestFunction(DepthTestFunction.NO_DEPTH_TEST)
+            .withDepthWrite(false)
+            .withCull(false)
+            .build();
+
+    private static final RenderPipeline LOGO_GLOW = RenderPipeline.builder()
+            .withLocation(Identifier.of("yachiyoc", "pipeline/logo_glow"))
+            .withVertexShader("core/position_tex_color")
+            .withFragmentShader(Identifier.of("yachiyoc", "core/yachiyo_hud"))
+            .withSampler("Sampler0")
+            .withUniform("DynamicTransforms", UniformType.UNIFORM_BUFFER)
+            .withUniform("Projection", UniformType.UNIFORM_BUFFER)
+            .withBlend(BlendFunction.TRANSLUCENT_PREMULTIPLIED_ALPHA)
+            .withVertexFormat(VertexFormats.POSITION_TEXTURE_COLOR, VertexFormat.DrawMode.QUADS)
+            .withDepthTestFunction(DepthTestFunction.NO_DEPTH_TEST)
+            .withDepthWrite(false)
+            .withCull(false)
+            .build();
+
     private Render2D() {
     }
 
@@ -24,6 +58,40 @@ public final class Render2D {
                 (int) x, (int) y, 0.0F, 0.0F,
                 (int) width, (int) height,
                 textureWidth, textureHeight, textureWidth, textureHeight);
+    }
+
+    /**
+     * Difference/invert blend: the source is combined with whatever is already
+     * in the GUI framebuffer. A white logo mask therefore becomes an inverted
+     * silhouette of the current background.
+     */
+    public static void invertTexture(DrawContext ctx, Identifier texture, float x, float y,
+                                     float width, float height, int textureWidth, int textureHeight) {
+        if (width <= 0.0F || height <= 0.0F) {
+            return;
+        }
+        ctx.drawTexture(LOGO_INVERT, texture,
+                (int) x, (int) y, 0.0F, 0.0F,
+                (int) width, (int) height,
+                textureWidth, textureHeight, textureWidth, textureHeight);
+    }
+
+    /**
+     * Icy glow shader for the HUD logo. The animated phase and glow/outline
+     * strengths are packed into the vertex color channels because a custom
+     * scalar uniform is not exposed by DrawContext.
+     */
+    public static void glowTexture(DrawContext ctx, Identifier texture, float x, float y,
+                                   float width, float height, int textureWidth, int textureHeight,
+                                   int packedControls) {
+        if (width <= 0.0F || height <= 0.0F) {
+            return;
+        }
+        ctx.drawTexture(LOGO_GLOW, texture,
+                (int) x, (int) y, 0.0F, 0.0F,
+                (int) width, (int) height,
+                textureWidth, textureHeight, textureWidth, textureHeight,
+                packedControls);
     }
 
     /**

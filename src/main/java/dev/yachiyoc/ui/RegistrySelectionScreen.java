@@ -69,7 +69,7 @@ public final class RegistrySelectionScreen extends Screen {
         layout();
 
         Render2D.roundedBox(context, windowX, windowY, windowWidth, windowHeight,
-                14.0F, Theme.WINDOW_BORDER, 0xF2141922);
+                14.0F, Theme.WINDOW_BORDER, Theme.WINDOW);
         Text2D.draw(context, title, windowX + 18.0F, windowY + 14.0F, Theme.TEXT, true);
         Text2D.draw(context, Text.translatable("selector.yachiyoc.hint"),
                 windowX + 18.0F, windowY + 28.0F, Theme.TEXT_MUTED, false);
@@ -79,7 +79,7 @@ public final class RegistrySelectionScreen extends Screen {
         boolean closeHovered = mouseX >= closeX && mouseX <= closeX + CLOSE_SIZE
                 && mouseY >= closeY && mouseY <= closeY + CLOSE_SIZE;
         Render2D.roundedRect(context, closeX, closeY, CLOSE_SIZE, CLOSE_SIZE, 6.0F,
-                closeHovered ? 0x44FF5A5A : 0x18FFFFFF);
+                closeHovered ? 0x44FF5A5A : Render2D.withAlpha(Theme.TEXT, 0.08F));
         for (int i = 0; i < 6; i++) {
             Render2D.fill(context, closeX + 6 + i, closeY + 6 + i, 1.0F, 1.0F, Theme.TEXT_DIM);
             Render2D.fill(context, closeX + 11 - i, closeY + 6 + i, 1.0F, 1.0F, Theme.TEXT_DIM);

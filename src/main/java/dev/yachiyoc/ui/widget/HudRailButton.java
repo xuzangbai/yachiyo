@@ -10,7 +10,7 @@ import net.minecraft.client.gui.DrawContext;
 import net.minecraft.text.Text;
 
 /**
- * A non-category rail action placed directly after the Render tab. It opens the
+ * A non-category rail action placed after all category tabs. It opens the
  * HUD editor instead of switching a module category.
  */
 public final class HudRailButton {
@@ -30,7 +30,7 @@ public final class HudRailButton {
     public void render(DrawContext ctx, float mouseX, float mouseY) {
         boolean hovered = contains(mouseX, mouseY);
         hover.set(hovered ? 1.0F : 0.0F);
-        int accent = 0xFFBA68C8;
+        int accent = Theme.ACCENT;
         Render2D.roundedRect(ctx, x, y, width, height, Theme.SMALL_RADIUS,
                 Render2D.withAlpha(accent, 0.10F + hover.value() * 0.12F));
         Render2D.roundedRect(ctx, x, y + 5.0F, 3.0F, height - 10.0F, 1.5F, accent);

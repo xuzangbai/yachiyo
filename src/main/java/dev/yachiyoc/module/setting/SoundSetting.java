@@ -67,7 +67,7 @@ public final class SoundSetting extends Setting<String> {
         float x = Math.max(4.0F, Math.min(anchorX, screenWidth - width - 4.0F));
         float y = Math.max(4.0F, Math.min(anchorY + 2.0F, screenHeight - height - 4.0F));
 
-        Render2D.roundedBox(context, x, y, width, height, 8.0F, Theme.CARD_BORDER, 0xF4161B24);
+        Render2D.roundedBox(context, x, y, width, height, 8.0F, Theme.CARD_BORDER, Theme.WINDOW);
         float rowY = y + 4.0F;
         for (String option : options) {
             boolean hovered = mouseX >= x + 4 && mouseX <= x + width - 4

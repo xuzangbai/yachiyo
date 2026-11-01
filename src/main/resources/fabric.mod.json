@@ -14,6 +14,9 @@
       "dev.yachiyoc.YachiyoC"
     ]
   },
+  "mixins": [
+    "yachiyoc.mixins.json"
+  ],
   "depends": {
     "fabricloader": ">=0.18.0",
     "minecraft": ">=1.21.11 <1.22",

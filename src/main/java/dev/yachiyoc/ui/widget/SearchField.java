@@ -63,8 +63,8 @@ public final class SearchField {
     }
 
     public void render(DrawContext ctx, float mouseX, float mouseY) {
-        int border = focused ? 0xB063B8FF : Theme.CARD_BORDER;
-        int fill = focused ? 0xCC111722 : 0x9910151D;
+        int border = focused ? Theme.SEARCH_BORDER_FOCUS : Theme.SEARCH_BORDER;
+        int fill = focused ? Theme.SEARCH_FILL_FOCUS : Theme.SEARCH_FILL;
         Render2D.roundedBox(ctx, x, y, width, height, Theme.SMALL_RADIUS, border, fill);
 
         float textY = y + (height - Text2D.height()) / 2.0F + 1.0F;

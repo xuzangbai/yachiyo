@@ -18,6 +18,7 @@ public final class ConfigData {
     public Map<String, Boolean> moduleStates = new LinkedHashMap<>();
     public Map<String, Map<String, JsonElement>> moduleSettings = new LinkedHashMap<>();
     public java.util.List<HudData> hudElements = new java.util.ArrayList<>();
+    public boolean hudInitialized;
 
     public static final class HudData {
         public String type;
