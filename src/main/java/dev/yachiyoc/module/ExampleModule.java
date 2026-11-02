@@ -25,6 +25,13 @@ public final class ExampleModule extends Module {
     }
 
     @Override
+    public boolean toggleFeedback() {
+        // This demo module has its own announce setting;
+        // avoid a duplicate generic keybind message.
+        return false;
+    }
+
+    @Override
     public void onEnable() {
         if (announce.get()) {
             Chat.info(Text.translatable("module.yachiyoc.example.enabled"));

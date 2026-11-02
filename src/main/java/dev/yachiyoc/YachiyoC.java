@@ -6,6 +6,7 @@ import dev.yachiyoc.hud.HudManager;
 import dev.yachiyoc.module.Module;
 import dev.yachiyoc.module.ModuleRegistry;
 import dev.yachiyoc.module.TriggerMode;
+import dev.yachiyoc.platform.Chat;
 import dev.yachiyoc.platform.Keybinds;
 import dev.yachiyoc.ui.ClickGuiScreen;
 import net.fabricmc.api.ClientModInitializer;
@@ -16,6 +17,7 @@ import net.fabricmc.fabric.api.client.rendering.v1.hud.HudElementRegistry;
 import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.util.InputUtil;
+import net.minecraft.text.Text;
 import net.minecraft.util.Identifier;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -114,14 +116,31 @@ public final class YachiyoC implements ClientModInitializer {
             boolean down = key > 0 && InputUtil.isKeyPressed(client.getWindow(), key);
             if (down && !wasDown) {
                 if (module.trigger.get() == TriggerMode.HOLD) {
-                    module.setEnabled(true);
+                    setFromKey(module, true);
                 } else {
-                    module.toggle();
+                    setFromKey(module, !module.enabled());
                 }
             } else if (!down && wasDown && module.trigger.get() == TriggerMode.HOLD) {
-                module.setEnabled(false);
+                setFromKey(module, false);
             }
             KEY_STATE.put(module.id(), down);
+        }
+    }
+
+    private static void setFromKey(Module module, boolean enabled) {
+        boolean before = module.enabled();
+        module.setEnabled(enabled);
+        if (before != module.enabled() && module.toggleFeedback()) {
+            Text status = Chat.status(enabled, Text.translatable(enabled
+                    ? "module.yachiyoc.toggle.on"
+                    : "module.yachiyoc.toggle.off"));
+            Text line = Chat.prefix()
+                    .append(Text.literal(enabled ? "+ " : "- ")
+                            .withColor(enabled ? Chat.enabledColor() : Chat.disabledColor()))
+                    .append(Chat.name(module.name()))
+                    .append(Text.literal(" "))
+                    .append(status);
+            Chat.replaceRaw("module_toggle:" + module.id(), line);
         }
     }
 

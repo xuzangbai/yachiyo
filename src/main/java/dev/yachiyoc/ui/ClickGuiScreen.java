@@ -391,13 +391,13 @@ public final class ClickGuiScreen extends Screen {
         }
         if (mouseX >= sidebarX && mouseX <= sidebarX + sidebarWidth
                 && mouseY >= sidebarY && mouseY <= sidebarY + sidebarHeight) {
-            sidebarScroll -= (float) verticalAmount * 20.0F;
+            sidebarScroll += (float) verticalAmount * 20.0F;
             relayout();
             return true;
         }
         if (mouseX >= contentX && mouseX <= contentX + contentWidth
                 && mouseY >= cardsY && mouseY <= cardsY + cardsHeight) {
-            contentScroll -= (float) verticalAmount * 26.0F;
+            contentScroll += (float) verticalAmount * 26.0F;
             relayout();
             return true;
         }

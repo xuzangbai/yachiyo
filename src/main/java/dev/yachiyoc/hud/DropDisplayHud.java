@@ -1,6 +1,7 @@
 package dev.yachiyoc.hud;
 
 import dev.yachiyoc.module.setting.BoolSetting;
+import dev.yachiyoc.module.setting.ColorSetting;
 import dev.yachiyoc.module.setting.DoubleSetting;
 import dev.yachiyoc.module.setting.RegistryListSetting;
 import dev.yachiyoc.module.setting.SoundSetting;
@@ -47,6 +48,8 @@ public final class DropDisplayHud extends HudElement {
             add(new DoubleSetting("hud.drop_display", "max_lines", 20.0, 1.0, 20.0, 1.0));
     private final BoolSetting background =
             add(new BoolSetting("hud.drop_display", "background", false));
+    private final ColorSetting backgroundColor =
+            add(new ColorSetting("hud.drop_display", "background_color", 0xCC10141C));
     private final DoubleSetting scale =
             add(new DoubleSetting("hud.drop_display", "scale", 1.0, 0.5, 2.0, 0.1));
     private final RegistryListSetting watchedItems =
@@ -67,6 +70,7 @@ public final class DropDisplayHud extends HudElement {
     public DropDisplayHud() {
         super("drop_display");
         pinPlayers.visibleWhen(showPlayers::get);
+        backgroundColor.visibleWhen(background::get);
     }
 
     @Override
@@ -211,7 +215,7 @@ public final class DropDisplayHud extends HudElement {
     public void render(DrawContext context) {
         float s = scale.get().floatValue();
         if (background.get()) {
-            Render2D.roundedRect(context, x, y, width, height, 6.0F * s, 0xCC10141C);
+            Render2D.roundedRect(context, x, y, width, height, 6.0F * s, backgroundColor.get());
         }
 
         if (entries.isEmpty()) {

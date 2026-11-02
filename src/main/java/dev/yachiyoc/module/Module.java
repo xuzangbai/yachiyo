@@ -68,6 +68,14 @@ public abstract class Module {
         return toggleable;
     }
 
+    /**
+     * Whether the keybind dispatcher should print a generic on/off chat message.
+     * Modules that send their own feedback can override this.
+     */
+    public boolean toggleFeedback() {
+        return true;
+    }
+
     public boolean enabled() {
         return enabled;
     }

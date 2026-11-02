@@ -53,6 +53,19 @@ public final class HudManager {
         ELEMENTS.remove(element);
     }
 
+    public static void clear() {
+        ELEMENTS.clear();
+    }
+
+    /**
+     * Restores the built-in HUD layout. The logo is part of the default setup,
+     * so resetting removes user-added HUDs but recreates a fresh logo.
+     */
+    public static void resetDefaults() {
+        ELEMENTS.clear();
+        add("logo", 12.0F, 12.0F);
+    }
+
     public static HudElement findAt(double mouseX, double mouseY) {
         for (int i = ELEMENTS.size() - 1; i >= 0; i--) {
             HudElement element = ELEMENTS.get(i);

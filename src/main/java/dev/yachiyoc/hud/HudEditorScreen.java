@@ -7,6 +7,7 @@ import dev.yachiyoc.ui.Theme;
 import dev.yachiyoc.ui.render.Render2D;
 import dev.yachiyoc.ui.render.Text2D;
 import dev.yachiyoc.ui.widget.ColorPickerPopup;
+import dev.yachiyoc.ui.widget.ExpandAnimation;
 import dev.yachiyoc.ui.widget.SettingRow;
 import net.minecraft.client.gui.Click;
 import net.minecraft.client.gui.DrawContext;
@@ -38,6 +39,18 @@ public final class HudEditorScreen extends Screen {
     private float panelDragOffsetX;
     private float panelDragOffsetY;
 
+    private static final float EDITOR_WIDTH = 270.0F;
+    private static final float EDITOR_HEIGHT = 30.0F;
+    private float editorX = 10.0F;
+    private float editorY = 10.0F;
+    private boolean draggingEditor;
+    private float editorDragOffsetX;
+    private float editorDragOffsetY;
+
+    private static final float CONFIG_WIDTH = 330.0F;
+    private final ExpandAnimation configAnimation = new ExpandAnimation();
+    private long resetConfirmUntil;
+
     private boolean addMenuOpen;
     private float menuX;
     private float menuY;
@@ -59,16 +72,21 @@ public final class HudEditorScreen extends Screen {
 
     @Override
     public void render(DrawContext context, int mouseX, int mouseY, float delta) {
+        configAnimation.update(delta);
         // HUD elements themselves are drawn by HudManager's HUD callback, so the
         // editor only adds outlines, the add menu and the settings panel.
         HudManager.renderEditorOverlay(context, mouseX, mouseY, selected);
 
-        Render2D.roundedRect(context, 10.0F, 10.0F, 270.0F, 30.0F, 8.0F, Render2D.withAlpha(Theme.WINDOW, 0.92F));
-        Text2D.draw(context, Text.translatable("hud.yachiyoc.editor"), 20.0F, 16.0F,
+        Render2D.roundedRect(context, editorX, editorY, EDITOR_WIDTH, EDITOR_HEIGHT, 8.0F,
+                Render2D.withAlpha(Theme.WINDOW, 0.92F));
+        Text2D.draw(context, Text.translatable("hud.yachiyoc.editor"), editorX + 10.0F, editorY + 6.0F,
                 Theme.TEXT, false);
-        Text2D.draw(context, Text.translatable("hud.yachiyoc.hint"), 20.0F, 28.0F,
+        Text2D.draw(context, Text.translatable("hud.yachiyoc.hint"), editorX + 10.0F, editorY + 18.0F,
                 Theme.TEXT_MUTED, false);
 
+        if (configAnimation.visible()) {
+            renderConfig(context, mouseX, mouseY);
+        }
         if (addMenuOpen) {
             renderAddMenu(context, mouseX, mouseY);
         }
@@ -77,6 +95,143 @@ public final class HudEditorScreen extends Screen {
         }
         ColorPickerPopup.render(context, mouseX, mouseY);
         SoundSetting.renderOpen(context, mouseX, mouseY, width, height);
+    }
+
+    private float configFullHeight() {
+        int rows = Math.max(1, HudManager.elements().size());
+        return 24.0F + rows * 30.0F + 46.0F;
+    }
+
+    private void keepConfigVisible() {
+        float full = configFullHeight();
+        float maxY = height - 8.0F - full - 4.0F - EDITOR_HEIGHT;
+        if (editorY > maxY) {
+            editorY = Math.max(8.0F, maxY);
+        }
+    }
+
+    private void renderConfig(DrawContext context, int mouseX, int mouseY) {
+        List<HudElement> elements = HudManager.elements();
+        float full = configFullHeight();
+        float h = configAnimation.apply(full);
+        if (h <= 0.0F) {
+            return;
+        }
+        float x = clamp(editorX, 8.0F, width - CONFIG_WIDTH - 8.0F);
+        float y = editorY + EDITOR_HEIGHT + 4.0F;
+        if (y + h > height - 8.0F) {
+            y = height - h - 8.0F;
+        }
+
+        Render2D.roundedBox(context, x, y, CONFIG_WIDTH, h, 10.0F, Theme.CARD_BORDER, Theme.WINDOW);
+        context.enableScissor((int) x, (int) y, (int) (x + CONFIG_WIDTH), (int) (y + h));
+        Text2D.draw(context, Text.translatable("hud.yachiyoc.config"), x + 10.0F, y + 7.0F,
+                Theme.TEXT_DIM, false);
+
+        float rowY = y + 24.0F;
+        if (elements.isEmpty()) {
+            Text2D.draw(context, Text.translatable("hud.yachiyoc.config.empty"), x + 10.0F,
+                    rowY + 8.0F, Theme.TEXT_MUTED, false);
+        } else {
+            for (HudElement element : elements) {
+                boolean hovered = mouseX >= x + 6 && mouseX <= x + CONFIG_WIDTH - 6
+                        && mouseY >= rowY && mouseY <= rowY + 26;
+                if (hovered) {
+                    Render2D.roundedRect(context, x + 6.0F, rowY, CONFIG_WIDTH - 12.0F, 26.0F,
+                            6.0F, Render2D.withAlpha(Theme.ACCENT, 0.14F));
+                }
+                Text2D.draw(context, element.name(), x + 12.0F, rowY + 8.0F, Theme.TEXT, false);
+
+                float settingsX = x + CONFIG_WIDTH - 102.0F;
+                float deleteX = x + CONFIG_WIDTH - 48.0F;
+                drawSmallButton(context, settingsX, rowY + 5.0F, 46.0F,
+                        Text.translatable("hud.yachiyoc.config.settings"), mouseX, mouseY);
+                drawSmallButton(context, deleteX, rowY + 5.0F, 38.0F,
+                        Text.translatable("hud.yachiyoc.delete"), mouseX, mouseY);
+                rowY += 30.0F;
+            }
+        }
+
+        float resetY = y + full - 36.0F;
+        boolean confirming = System.currentTimeMillis() < resetConfirmUntil;
+        boolean resetHovered = mouseX >= x + 8 && mouseX <= x + CONFIG_WIDTH - 8
+                && mouseY >= resetY && mouseY <= resetY + 24;
+        int resetColor = confirming ? 0xFFC84F4F : 0x33C84F4F;
+        if (resetHovered) {
+            resetColor = confirming ? 0xFFE06060 : 0x55C84F4F;
+        }
+        Render2D.roundedRect(context, x + 8.0F, resetY, CONFIG_WIDTH - 16.0F, 24.0F, 6.0F, resetColor);
+        Text2D.drawCentered(context, Text.translatable(confirming
+                        ? "hud.yachiyoc.config.reset_confirm"
+                        : "hud.yachiyoc.config.reset"),
+                x + CONFIG_WIDTH / 2.0F, resetY + 8.0F, 0xFFFFFFFF, false);
+        context.disableScissor();
+    }
+
+    private void drawSmallButton(DrawContext context, float x, float y, float width, Text label,
+                                 int mouseX, int mouseY) {
+        boolean hovered = mouseX >= x && mouseX <= x + width && mouseY >= y && mouseY <= y + 16;
+        Render2D.roundedRect(context, x, y, width, 16.0F, 4.0F,
+                hovered ? Render2D.withAlpha(Theme.ACCENT, 0.30F) : Render2D.withAlpha(Theme.TEXT, 0.08F));
+        Text2D.drawCentered(context, label, x + width / 2.0F, y + 4.0F, Theme.TEXT_DIM, false);
+    }
+
+    private boolean handleConfigClick(Click click) {
+        List<HudElement> elements = HudManager.elements();
+        float full = configFullHeight();
+        float x = clamp(editorX, 8.0F, width - CONFIG_WIDTH - 8.0F);
+        float y = editorY + EDITOR_HEIGHT + 4.0F;
+        if (y + full > height - 8.0F) {
+            y = height - full - 8.0F;
+        }
+        if (click.x() < x || click.x() > x + CONFIG_WIDTH || click.y() < y || click.y() > y + full) {
+            return false;
+        }
+
+        float resetY = y + full - 36.0F;
+        if (click.x() >= x + 8 && click.x() <= x + CONFIG_WIDTH - 8
+                && click.y() >= resetY && click.y() <= resetY + 24) {
+            if (System.currentTimeMillis() < resetConfirmUntil) {
+                HudManager.resetDefaults();
+                selected = null;
+                settingsTarget = null;
+                settingRows.clear();
+                resetConfirmUntil = 0L;
+                save();
+            } else {
+                resetConfirmUntil = System.currentTimeMillis() + 3000L;
+            }
+            return true;
+        }
+
+        float rowY = y + 24.0F;
+        for (HudElement element : elements) {
+            if (click.y() >= rowY && click.y() <= rowY + 26) {
+                float settingsX = x + CONFIG_WIDTH - 102.0F;
+                float deleteX = x + CONFIG_WIDTH - 48.0F;
+                if (click.x() >= settingsX && click.x() <= settingsX + 46) {
+                    openSettings(element);
+                    return true;
+                }
+                if (click.x() >= deleteX && click.x() <= deleteX + 38) {
+                    HudManager.remove(element);
+                    if (selected == element) {
+                        selected = null;
+                    }
+                    if (settingsTarget == element) {
+                        settingsTarget = null;
+                        settingRows.clear();
+                    }
+                    keepConfigVisible();
+                    save();
+                    return true;
+                }
+                selected = element;
+                return true;
+            }
+            rowY += 30.0F;
+        }
+        return true;
     }
 
     private void renderAddMenu(DrawContext context, int mouseX, int mouseY) {
@@ -175,6 +330,27 @@ public final class HudEditorScreen extends Screen {
             return true;
         }
         StringSetting.stopAllEditing();
+        if (click.x() >= editorX && click.x() <= editorX + EDITOR_WIDTH
+                && click.y() >= editorY && click.y() <= editorY + EDITOR_HEIGHT) {
+            if (click.button() == 1) {
+                configAnimation.toggle();
+                resetConfirmUntil = 0L;
+                if (configAnimation.open()) {
+                    settingsTarget = null;
+                    settingRows.clear();
+                    addMenuOpen = false;
+                    keepConfigVisible();
+                }
+                return true;
+            }
+            draggingEditor = true;
+            editorDragOffsetX = (float) click.x() - editorX;
+            editorDragOffsetY = (float) click.y() - editorY;
+            return true;
+        }
+        if (configAnimation.open() && handleConfigClick(click)) {
+            return true;
+        }
         if (addMenuOpen) {
             List<HudManager.HudType> types = HudManager.types();
             float w = 190.0F;
@@ -193,6 +369,7 @@ public final class HudEditorScreen extends Screen {
                         if (click.button() == 1) {
                             openSettings(element);
                         }
+                        keepConfigVisible();
                         save();
                     }
                     return true;
@@ -280,6 +457,11 @@ public final class HudEditorScreen extends Screen {
 
     @Override
     public boolean mouseDragged(Click click, double deltaX, double deltaY) {
+        if (draggingEditor) {
+            editorX = clamp((float) click.x() - editorDragOffsetX, 0.0F, width - EDITOR_WIDTH);
+            editorY = clamp((float) click.y() - editorDragOffsetY, 0.0F, height - EDITOR_HEIGHT);
+            return true;
+        }
         if (ColorPickerPopup.mouseDragged(click)) {
             return true;
         }
@@ -306,6 +488,10 @@ public final class HudEditorScreen extends Screen {
 
     @Override
     public boolean mouseReleased(Click click) {
+        if (draggingEditor) {
+            draggingEditor = false;
+            return true;
+        }
         if (ColorPickerPopup.mouseReleased(click)) {
             save();
             return true;

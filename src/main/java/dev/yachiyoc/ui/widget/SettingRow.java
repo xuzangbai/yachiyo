@@ -183,6 +183,7 @@ public final class SettingRow {
             if (click.x() >= resetX && click.x() <= resetX + 14
                     && click.y() >= y + 5.0F && click.y() <= y + 19.0F) {
                 setting.reset();
+                refresh();
                 YachiyoC.config().save();
                 return true;
             }
