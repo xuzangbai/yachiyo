@@ -7,6 +7,7 @@ import dev.yachiyoc.module.setting.ButtonSetting;
 import dev.yachiyoc.module.setting.ColorSetting;
 import dev.yachiyoc.module.setting.DoubleSetting;
 import dev.yachiyoc.module.setting.EnumSetting;
+import dev.yachiyoc.module.setting.FontSetting;
 import dev.yachiyoc.module.setting.RegistryListSetting;
 import dev.yachiyoc.module.setting.Setting;
 import dev.yachiyoc.module.setting.SoundSetting;
@@ -69,6 +70,9 @@ public final class SettingRow {
             return;
         }
         boolean hovered = contains(mouseX, mouseY);
+        if (hovered) {
+            SettingDescriptionOverlay.set(setting.description());
+        }
         hover.set(hovered ? 1.0F : 0.0F);
         if (hovered) {
             Render2D.roundedRect(ctx, x, y, width, height(), Theme.SMALL_RADIUS - 1.0F, Theme.ROW_HOVER);
@@ -99,12 +103,19 @@ public final class SettingRow {
                 Render2D.roundedRect(ctx, trackX, trackY, filled, 3.0F, 1.5F, accent);
                 Render2D.roundedRect(ctx, trackX + filled - 2.5F, trackY - 2.0F, 5.0F, 7.0F, 2.5F, Theme.KNOB);
             }
+        } else if (setting instanceof FontSetting fontSetting) {
+            float pillX = x + width - 88.0F;
+            float pillY = y + 5.0F;
+            Render2D.roundedRect(ctx, pillX, pillY, 60.0F, 14.0F, 5.0F,
+                    Render2D.mix(Theme.FIELD, Theme.FIELD_HOVER, hover.value()));
+            Text2D.drawCentered(ctx, Text2D.trim(Text.literal(fontSetting.displayValue() + " v"), 56),
+                    pillX + 30.0F, pillY + 3.0F, Theme.TEXT, false);
         } else if (setting instanceof EnumSetting<?> enumSetting) {
             float pillX = x + width - 88.0F;
             float pillY = y + 5.0F;
             Render2D.roundedRect(ctx, pillX, pillY, 60.0F, 14.0F, 5.0F,
                     Render2D.mix(Theme.FIELD, Theme.FIELD_HOVER, hover.value()));
-            Text2D.drawCentered(ctx, Text.literal(enumSetting.displayValue()),
+            Text2D.drawCentered(ctx, Text2D.trim(Text.literal(enumSetting.displayValue() + " v"), 56),
                     pillX + 30.0F, pillY + 3.0F, Theme.TEXT, false);
         } else if (setting instanceof ColorSetting color) {
             float swatchX = x + width - 50.0F;
@@ -191,8 +202,14 @@ public final class SettingRow {
         if (setting instanceof BoolSetting bool) {
             bool.toggle();
             boolAnim.set(bool.get() ? 1.0F : 0.0F);
+        } else if (setting instanceof FontSetting fontSetting) {
+            MinecraftClient client = MinecraftClient.getInstance();
+            FontDropdownPopup.toggle(fontSetting, x + width - 88.0F, y + 19.0F, 160.0F,
+                    client.getWindow().getScaledWidth(), client.getWindow().getScaledHeight());
         } else if (setting instanceof EnumSetting<?> enumSetting) {
-            enumSetting.cycle();
+            MinecraftClient client = MinecraftClient.getInstance();
+            EnumDropdownPopup.toggle(enumSetting, x + width - 88.0F, y + 19.0F, 130.0F,
+                    client.getWindow().getScaledWidth(), client.getWindow().getScaledHeight());
         } else if (setting instanceof ColorSetting color) {
             if (click.button() == 1) {
                 SoundSetting.closeOpen();

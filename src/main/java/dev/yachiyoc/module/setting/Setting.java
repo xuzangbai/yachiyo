@@ -5,6 +5,7 @@ import net.minecraft.text.Text;
 
 import java.util.Objects;
 import java.util.function.BooleanSupplier;
+import java.util.function.Supplier;
 
 /**
  * A single configurable value owned by a module.
@@ -20,6 +21,8 @@ public abstract class Setting<T> {
     private final T defaultValue;
     protected T value;
     private BooleanSupplier visible = () -> true;
+    private Supplier<Text> description =
+            () -> Text.translatable("ui.yachiyoc.no_description");
 
     protected Setting(String owner, String id, T defaultValue) {
         this.owner = Objects.requireNonNull(owner);
@@ -62,6 +65,15 @@ public abstract class Setting<T> {
 
     public boolean isVisible() {
         return visible.getAsBoolean();
+    }
+
+    public Setting<T> description(Supplier<Text> supplier) {
+        this.description = Objects.requireNonNull(supplier);
+        return this;
+    }
+
+    public Text description() {
+        return description.get();
     }
 
     public String translationKey() {

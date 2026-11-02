@@ -7,8 +7,11 @@ import dev.yachiyoc.ui.Theme;
 import dev.yachiyoc.ui.render.Render2D;
 import dev.yachiyoc.ui.render.Text2D;
 import dev.yachiyoc.ui.widget.ColorPickerPopup;
+import dev.yachiyoc.ui.widget.EnumDropdownPopup;
+import dev.yachiyoc.ui.widget.FontDropdownPopup;
 import dev.yachiyoc.ui.widget.ExpandAnimation;
 import dev.yachiyoc.ui.widget.SettingRow;
+import dev.yachiyoc.ui.widget.SettingDescriptionOverlay;
 import net.minecraft.client.gui.Click;
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.gui.screen.Screen;
@@ -72,6 +75,7 @@ public final class HudEditorScreen extends Screen {
 
     @Override
     public void render(DrawContext context, int mouseX, int mouseY, float delta) {
+        SettingDescriptionOverlay.beginFrame();
         configAnimation.update(delta);
         // HUD elements themselves are drawn by HudManager's HUD callback, so the
         // editor only adds outlines, the add menu and the settings panel.
@@ -94,7 +98,10 @@ public final class HudEditorScreen extends Screen {
             renderSettings(context, mouseX, mouseY);
         }
         ColorPickerPopup.render(context, mouseX, mouseY);
+        EnumDropdownPopup.render(context, mouseX, mouseY);
+        FontDropdownPopup.render(context, mouseX, mouseY);
         SoundSetting.renderOpen(context, mouseX, mouseY, width, height);
+        SettingDescriptionOverlay.render(context, width);
     }
 
     private float configFullHeight() {
@@ -319,6 +326,12 @@ public final class HudEditorScreen extends Screen {
     @Override
     public boolean mouseClicked(Click click, boolean doubled) {
         if (System.currentTimeMillis() - openedAt < 180L) {
+            return true;
+        }
+        if (FontDropdownPopup.mouseClicked(click)) {
+            return true;
+        }
+        if (EnumDropdownPopup.mouseClicked(click)) {
             return true;
         }
         if (ColorPickerPopup.mouseClicked(click)) {

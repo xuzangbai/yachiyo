@@ -5,13 +5,28 @@ import com.google.gson.JsonPrimitive;
 import net.minecraft.util.Language;
 
 import java.util.Locale;
+import java.util.function.Consumer;
 
 public final class EnumSetting<E extends Enum<E>> extends Setting<E> {
     private final E[] values;
+    private final Consumer<E> listener;
 
     public EnumSetting(String owner, String id, Class<E> type, E defaultValue) {
+        this(owner, id, type, defaultValue, null);
+    }
+
+    public EnumSetting(String owner, String id, Class<E> type, E defaultValue, Consumer<E> listener) {
         super(owner, id, defaultValue);
         this.values = type.getEnumConstants();
+        this.listener = listener;
+    }
+
+    @Override
+    public void set(E value) {
+        super.set(value);
+        if (listener != null) {
+            listener.accept(get());
+        }
     }
 
     public E[] values() {
@@ -25,8 +40,12 @@ public final class EnumSetting<E extends Enum<E>> extends Setting<E> {
 
     @Override
     public String displayValue() {
-        String key = translationKey() + ".value." + get().name().toLowerCase(Locale.ROOT);
-        return Language.getInstance().get(key, get().name());
+        return displayValue(get());
+    }
+
+    public String displayValue(E value) {
+        String key = translationKey() + ".value." + value.name().toLowerCase(Locale.ROOT);
+        return Language.getInstance().get(key, value.name());
     }
 
     @Override

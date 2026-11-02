@@ -47,6 +47,9 @@ public final class ModuleCard {
 
     public void render(DrawContext ctx, float mouseX, float mouseY, int accent) {
         boolean hovered = contains(mouseX, mouseY);
+        if (hovered) {
+            SettingDescriptionOverlay.set(module.description());
+        }
         hover.set(hovered ? 1.0F : 0.0F);
         float hoverAmount = hover.value();
 

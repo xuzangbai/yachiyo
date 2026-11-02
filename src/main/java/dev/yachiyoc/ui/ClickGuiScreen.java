@@ -14,10 +14,13 @@ import dev.yachiyoc.ui.render.Render2D;
 import dev.yachiyoc.ui.render.Text2D;
 import dev.yachiyoc.ui.widget.CategoryTab;
 import dev.yachiyoc.ui.widget.ColorPickerPopup;
+import dev.yachiyoc.ui.widget.EnumDropdownPopup;
+import dev.yachiyoc.ui.widget.FontDropdownPopup;
 import dev.yachiyoc.ui.widget.HudRailButton;
 import dev.yachiyoc.ui.widget.ModuleCard;
 import dev.yachiyoc.ui.widget.ModuleSettingsWindow;
 import dev.yachiyoc.ui.widget.SearchField;
+import dev.yachiyoc.ui.widget.SettingDescriptionOverlay;
 import net.minecraft.client.gui.Click;
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.gui.screen.Screen;
@@ -182,6 +185,7 @@ public final class ClickGuiScreen extends Screen {
 
     @Override
     public void render(DrawContext ctx, int mouseX, int mouseY, float delta) {
+        SettingDescriptionOverlay.beginFrame();
         relayout();
         List<ModuleCard> filtered = visibleCards.stream().filter(card -> search.matches(card.module())).toList();
 
@@ -287,7 +291,10 @@ public final class ClickGuiScreen extends Screen {
             moduleWindow.render(ctx, mouseX, mouseY, width, height);
         }
         ColorPickerPopup.render(ctx, mouseX, mouseY);
+        EnumDropdownPopup.render(ctx, mouseX, mouseY);
+        FontDropdownPopup.render(ctx, mouseX, mouseY);
         SoundSetting.renderOpen(ctx, mouseX, mouseY, width, height);
+        SettingDescriptionOverlay.render(ctx, width);
     }
 
     private void openModuleWindow(Module module, Click click) {
@@ -300,6 +307,12 @@ public final class ClickGuiScreen extends Screen {
 
     @Override
     public boolean mouseClicked(Click click, boolean doubled) {
+        if (FontDropdownPopup.mouseClicked(click)) {
+            return true;
+        }
+        if (EnumDropdownPopup.mouseClicked(click)) {
+            return true;
+        }
         if (ColorPickerPopup.mouseClicked(click)) {
             return true;
         }

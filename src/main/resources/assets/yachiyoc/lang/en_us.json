@@ -23,6 +23,14 @@
   "module.yachiyoc.hud.description": "Placeholder — the HUD renderer is not implemented yet.",
   "module.yachiyoc.toolbox": "Toolbox",
   "module.yachiyoc.toolbox.description": "Fun-tools category placeholder. No gameplay logic yet.",
+  "setting.yachiyoc.client.config.font": "Font",
+  "setting.yachiyoc.client.config.font.description": "Put .ttf files in %s, restart the game, then select one here. Only Ma Shan Zheng is bundled.",
+  "ui.yachiyoc.no_description": "No description",
+  "setting.yachiyoc.client.config.font.value.vanilla": "Default",
+
+
+  "setting.yachiyoc.client.config.font.value.ma_shan": "Ma Shan Zheng",
+  "setting.yachiyoc.client.config.font.value.external": "External Font",
   "setting.yachiyoc.client.config.chat_prefix": "Client Prefix Text",
   "setting.yachiyoc.client.config.prefix_color": "Prefix Color",
   "setting.yachiyoc.client.config.module_name_color": "Module Name",

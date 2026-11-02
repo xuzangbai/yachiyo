@@ -23,6 +23,14 @@
   "module.yachiyoc.hud.description": "占位模块 —— HUD 渲染尚未实现。",
   "module.yachiyoc.toolbox": "工具盒",
   "module.yachiyoc.toolbox.description": "妙妙工具占位模块，功能尚未实现。",
+  "setting.yachiyoc.client.config.font": "字体",
+  "setting.yachiyoc.client.config.font.description": "把 .ttf 字体放到 %s，重进游戏后在这里选择",
+  "ui.yachiyoc.no_description": "无",
+  "setting.yachiyoc.client.config.font.value.vanilla": "默认",
+
+
+  "setting.yachiyoc.client.config.font.value.ma_shan": "马善政毛笔体",
+  "setting.yachiyoc.client.config.font.value.external": "外置字体",
   "setting.yachiyoc.client.config.chat_prefix": "客户端前缀文字",
   "setting.yachiyoc.client.config.prefix_color": "客户端前缀颜色",
   "setting.yachiyoc.client.config.module_name_color": "模块名颜色",

@@ -4,7 +4,9 @@
   "compatibilityLevel": "JAVA_21",
   "client": [
     "ChatScreenMixin",
-    "ChatHudMixin"
+    "ChatHudMixin",
+    "FontManagerMixin",
+    "MinecraftClientMixin"
   ],
   "injectors": {
     "defaultRequire": 1
