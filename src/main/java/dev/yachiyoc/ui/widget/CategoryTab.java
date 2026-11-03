@@ -57,19 +57,21 @@ public final class CategoryTab {
         hover.set(hovered ? 1.0F : 0.0F);
         float activeAmount = activeAnim.value();
 
-        int base = Render2D.withAlpha(Theme.TEXT, 0.04F + hover.value() * 0.04F);
+        int base = hovered ? Theme.STATE_LAYER_STRONG : Theme.STATE_LAYER;
         Render2D.roundedRect(ctx, x, y, width, height, Theme.SMALL_RADIUS, base);
         if (activeAmount > 0.01F) {
             Render2D.roundedRect(ctx, x, y, width, height, Theme.SMALL_RADIUS,
-                    Render2D.withAlpha(accent, 0.16F * activeAmount));
+                    Render2D.withAlpha(Theme.PRIMARY_CONTAINER, 0.90F * activeAmount));
+            Render2D.roundedRect(ctx, x + 5.0F, y + 6.0F, 3.0F, height - 12.0F,
+                    1.5F, Render2D.withAlpha(accent, 0.95F * activeAmount));
         }
 
         int textColor = activeAmount > 0.5F ? Theme.TEXT : Theme.TEXT_DIM;
-        Text2D.draw(ctx, category.label(), x + 14.0F, y + (height - Text2D.height()) / 2.0F + 1.0F,
+        Text2D.draw(ctx, category.label(), x + 15.0F, y + (height - Text2D.height()) / 2.0F + 1.0F,
                 textColor, false);
-        Text2D.drawRight(ctx, Text.literal(String.valueOf(count)), x + width - 10.0F,
+        Text2D.drawRight(ctx, Text.literal(String.valueOf(count)), x + width - 11.0F,
                 y + (height - Text2D.height()) / 2.0F + 1.0F,
-                activeAmount > 0.5F ? Render2D.withAlpha(accent, 0.9F) : Theme.TEXT_MUTED, false);
+                activeAmount > 0.5F ? accent : Theme.TEXT_MUTED, false);
     }
 
     public boolean mouseClicked(Click click) {

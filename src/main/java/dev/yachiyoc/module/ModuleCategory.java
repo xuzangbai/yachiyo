@@ -8,14 +8,14 @@ import net.minecraft.text.Text;
  * with the enabled-module highlight.
  */
 public enum ModuleCategory {
-    COMBAT("combat", 0xFFC84F4F),
-    MOVEMENT("movement", 0xFF2A8F9C),
-    PLAYER("player", 0xFF3E8548),
-    WORLD("world", 0xFF92731E),
-    RENDER("render", 0xFF8A4A96),
-    MISC("misc", 0xFF5F6B72),
-    TOOLS("tools", 0xFF9B5A9B),
-    CLIENT("client", 0xFF2F6C9E);
+    COMBAT("combat", 0xFFD97A9E),
+    MOVEMENT("movement", 0xFF8C7BD8),
+    PLAYER("player", 0xFFC08CD8),
+    WORLD("world", 0xFF7F86D8),
+    RENDER("render", 0xFF9B7EDC),
+    MISC("misc", 0xFF9A8FB0),
+    TOOLS("tools", 0xFFB57BD0),
+    CLIENT("client", 0xFF7C6AE0);
 
     private final String id;
     private final int accent;

@@ -190,10 +190,13 @@ public final class ClickGuiScreen extends Screen {
         List<ModuleCard> filtered = visibleCards.stream().filter(card -> search.matches(card.module())).toList();
 
         // window
-        Render2D.roundedRect(ctx, windowX + 2.0F, windowY + 5.0F, windowWidth, windowHeight,
+        Render2D.elevation(ctx, windowX, windowY, windowWidth, windowHeight,
                 Theme.WINDOW_RADIUS, Theme.SHADOW);
         Render2D.roundedBox(ctx, windowX, windowY, windowWidth, windowHeight,
                 Theme.WINDOW_RADIUS, Theme.WINDOW_BORDER, Theme.WINDOW);
+        Render2D.roundedRect(ctx, windowX + 1.0F, windowY + 1.0F, windowWidth - 2.0F,
+                Theme.HEADER_HEIGHT, Theme.WINDOW_RADIUS - 1.0F,
+                Render2D.withAlpha(Theme.SECONDARY_CONTAINER, 0.22F));
 
         // header logo
         float logoHeight = 36.0F;
@@ -209,9 +212,12 @@ public final class ClickGuiScreen extends Screen {
                         logoWidth, logoHeight, 720, 221);
             }
         }
-        Text2D.draw(ctx, Text.literal("v" + YachiyoC.version()),
-                windowX + Theme.PADDING + logoWidth + 10.0F, windowY + 30.0F,
-                Theme.TEXT_MUTED, false);
+        Text version = Text.literal("v" + YachiyoC.version());
+        float versionX = windowX + Theme.PADDING + logoWidth + 10.0F;
+        Render2D.roundedRect(ctx, versionX - 6.0F, windowY + 25.0F,
+                Text2D.width(version) + 12.0F, 16.0F, 8.0F,
+                Render2D.withAlpha(Theme.ACCENT, 0.10F));
+        Text2D.draw(ctx, version, versionX, windowY + 30.0F, Theme.TEXT_DIM, false);
         Render2D.horizontalLine(ctx, windowX + Theme.PADDING, windowY + Theme.HEADER_HEIGHT - 1.0F,
                 windowWidth - Theme.PADDING * 2.0F, Theme.SEPARATOR);
 
@@ -232,11 +238,12 @@ public final class ClickGuiScreen extends Screen {
         }
 
         // content background
-        Render2D.roundedRect(ctx, contentX - 6.0F, contentY - 4.0F,
-                contentWidth + 12.0F, contentHeight + 8.0F, Theme.PANEL_RADIUS, Theme.CONTENT);
+        Render2D.roundedBox(ctx, contentX - 6.0F, contentY - 4.0F,
+                contentWidth + 12.0F, contentHeight + 8.0F, Theme.PANEL_RADIUS,
+                Render2D.withAlpha(Theme.OUTLINE, 0.55F), Theme.CONTENT);
 
-        Text categoryName = selected.label();
-        Text2D.draw(ctx, categoryName, contentX + 2.0F, contentY + 10.0F, Theme.TEXT, true);
+        Text categoryName = selected.label().copy().formatted(Formatting.BOLD);
+        Text2D.draw(ctx, categoryName, contentX + 2.0F, contentY + 10.0F, Theme.TEXT, false);
         Text2D.draw(ctx, Text.literal(" / " + visibleCards.size()),
                 contentX + 8.0F + Text2D.width(categoryName), contentY + 10.0F,
                 Theme.TEXT_MUTED, false);
@@ -262,8 +269,8 @@ public final class ClickGuiScreen extends Screen {
         Render2D.unscissor(ctx);
 
         // right category rail
-        Render2D.roundedRect(ctx, sidebarX, sidebarY, sidebarWidth, sidebarHeight,
-                Theme.PANEL_RADIUS, Theme.SIDEBAR);
+        Render2D.roundedBox(ctx, sidebarX, sidebarY, sidebarWidth, sidebarHeight,
+                Theme.PANEL_RADIUS, Render2D.withAlpha(Theme.OUTLINE, 0.55F), Theme.SIDEBAR);
         Text2D.draw(ctx, Text.translatable("ui.yachiyoc.categories"),
                 sidebarX + 12.0F, sidebarY + 8.0F, Theme.TEXT_MUTED, false);
         Render2D.scissor(ctx, sidebarX + 2.0F, sidebarY + 20.0F,

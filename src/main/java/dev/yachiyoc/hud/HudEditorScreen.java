@@ -471,16 +471,16 @@ public final class HudEditorScreen extends Screen {
     @Override
     public boolean mouseDragged(Click click, double deltaX, double deltaY) {
         if (draggingEditor) {
-            editorX = clamp((float) click.x() - editorDragOffsetX, 0.0F, width - EDITOR_WIDTH);
-            editorY = clamp((float) click.y() - editorDragOffsetY, 0.0F, height - EDITOR_HEIGHT);
+            editorX = Math.round(clamp((float) click.x() - editorDragOffsetX, 0.0F, width - EDITOR_WIDTH));
+            editorY = Math.round(clamp((float) click.y() - editorDragOffsetY, 0.0F, height - EDITOR_HEIGHT));
             return true;
         }
         if (ColorPickerPopup.mouseDragged(click)) {
             return true;
         }
         if (draggingPanel && settingsTarget != null) {
-            panelX = clamp((float) click.x() - panelDragOffsetX, 8.0F, width - panelWidth - 8.0F);
-            panelY = clamp((float) click.y() - panelDragOffsetY, 8.0F, height - panelHeight - 8.0F);
+            panelX = Math.round(clamp((float) click.x() - panelDragOffsetX, 8.0F, width - panelWidth - 8.0F));
+            panelY = Math.round(clamp((float) click.y() - panelDragOffsetY, 8.0F, height - panelHeight - 8.0F));
             panelPositions.put(settingsTarget, new float[]{panelX, panelY});
             return true;
         }

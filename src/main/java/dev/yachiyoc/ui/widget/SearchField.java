@@ -65,16 +65,19 @@ public final class SearchField {
     public void render(DrawContext ctx, float mouseX, float mouseY) {
         int border = focused ? Theme.SEARCH_BORDER_FOCUS : Theme.SEARCH_BORDER;
         int fill = focused ? Theme.SEARCH_FILL_FOCUS : Theme.SEARCH_FILL;
-        Render2D.roundedBox(ctx, x, y, width, height, Theme.SMALL_RADIUS, border, fill);
+        float radius = height / 2.0F;
+        Render2D.roundedBox(ctx, x, y, width, height, radius, border, fill);
+        Render2D.roundedRect(ctx, x + 9.0F, y + height / 2.0F - 3.0F, 3.0F, 6.0F,
+                1.5F, focused ? Theme.ACCENT : Theme.TEXT_MUTED);
 
         float textY = y + (height - Text2D.height()) / 2.0F + 1.0F;
         if (query.isEmpty()) {
-            Text2D.draw(ctx, placeholder, x + 10.0F, textY, Theme.TEXT_MUTED, false);
+            Text2D.draw(ctx, placeholder, x + 18.0F, textY, Theme.TEXT_MUTED, false);
         } else {
             Text shown = Text2D.trim(Text.literal(query), (int) width - 30);
             Text2D.draw(ctx, shown, x + 10.0F, textY, Theme.TEXT, false);
             if (focused && (System.currentTimeMillis() / 500L) % 2L == 0L) {
-                float cursorX = x + 10.0F + Text2D.width(Text.literal(query)) + 1.0F;
+                float cursorX = x + 18.0F + Text2D.width(Text.literal(query)) + 1.0F;
                 Render2D.fill(ctx, cursorX, y + 5.0F, 1.0F, height - 10.0F, Theme.ACCENT);
             }
         }

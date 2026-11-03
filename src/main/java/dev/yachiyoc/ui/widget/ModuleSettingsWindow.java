@@ -10,6 +10,7 @@ import net.minecraft.client.gui.Click;
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.input.KeyInput;
 import net.minecraft.text.Text;
+import net.minecraft.util.Formatting;
 import org.lwjgl.glfw.GLFW;
 
 import java.util.ArrayList;
@@ -64,8 +65,13 @@ public final class ModuleSettingsWindow {
         y = clamp(y, 6.0F, screenHeight - height - 6.0F);
         float contentHeight = height - HEADER - FOOTER - 4.0F;
 
-        Render2D.roundedBox(context, x, y, WIDTH, height, 12.0F, Theme.CARD_BORDER, Theme.WINDOW);
-        Text2D.draw(context, module.name(), x + 12.0F, y + 8.0F, Theme.TEXT, true);
+        Render2D.elevation(context, x, y, WIDTH, height, 18.0F, Theme.SHADOW);
+        Render2D.roundedBox(context, x, y, WIDTH, height, 18.0F,
+                Render2D.withAlpha(Theme.OUTLINE_STRONG, 0.65F), Theme.WINDOW);
+        Render2D.roundedRect(context, x + 1.0F, y + 1.0F, WIDTH - 2.0F, HEADER,
+                17.0F, Render2D.withAlpha(Theme.SECONDARY_CONTAINER, 0.22F));
+        Text2D.draw(context, module.name().copy().formatted(Formatting.BOLD), x + 12.0F, y + 8.0F,
+                Theme.TEXT, false);
         Text2D.draw(context, Text.literal("::"), x + WIDTH - 54.0F, y + 8.0F,
                 Theme.TEXT_MUTED, false);
 
@@ -73,8 +79,8 @@ public final class ModuleSettingsWindow {
         float closeY = y + 7.0F;
         boolean closeHovered = mouseX >= closeX && mouseX <= closeX + 15
                 && mouseY >= closeY && mouseY <= closeY + 15;
-        Render2D.roundedRect(context, closeX, closeY, 15.0F, 15.0F, 4.0F,
-                closeHovered ? 0x44FF5A5A : Render2D.withAlpha(Theme.TEXT, 0.08F));
+        Render2D.roundedRect(context, closeX, closeY, 15.0F, 15.0F, 7.5F,
+                closeHovered ? 0x44FF5A5A : Theme.STATE_LAYER);
         for (int i = 0; i < 5; i++) {
             Render2D.fill(context, closeX + 5 + i, closeY + 5 + i, 1.0F, 1.0F, Theme.TEXT_DIM);
             Render2D.fill(context, closeX + 9 - i, closeY + 5 + i, 1.0F, 1.0F, Theme.TEXT_DIM);
@@ -196,8 +202,8 @@ public final class ModuleSettingsWindow {
             return true;
         }
         if (dragging) {
-            x = (float) click.x() - dragOffsetX;
-            y = (float) click.y() - dragOffsetY;
+            x = Math.round((float) click.x() - dragOffsetX);
+            y = Math.round((float) click.y() - dragOffsetY);
             return true;
         }
         for (SettingRow row : rows) {

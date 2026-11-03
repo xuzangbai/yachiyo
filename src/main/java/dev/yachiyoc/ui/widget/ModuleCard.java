@@ -9,6 +9,7 @@ import dev.yachiyoc.ui.render.Text2D;
 import net.minecraft.client.gui.Click;
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.text.Text;
+import net.minecraft.util.Formatting;
 
 /**
  * Horizontal module card. Left click toggles the module; right click is handled
@@ -59,7 +60,12 @@ public final class ModuleCard {
         int borderColor = module.enabled() || hovered
                 ? Render2D.withAlpha(accent, 0.35F + hoverAmount * 0.25F)
                 : Theme.CARD_BORDER;
+        Render2D.elevation(ctx, x, y, width, Theme.CARD_HEIGHT, Theme.CARD_RADIUS, Theme.SHADOW);
         Render2D.roundedBox(ctx, x, y, width, Theme.CARD_HEIGHT, Theme.CARD_RADIUS, borderColor, cardColor);
+        if (hovered) {
+            Render2D.roundedRect(ctx, x + 1.0F, y + 1.0F, width - 2.0F, Theme.CARD_HEIGHT - 2.0F,
+                    Theme.CARD_RADIUS - 1.0F, Theme.STATE_LAYER);
+        }
 
         if (module.enabled()) {
             Render2D.roundedRect(ctx, x + 8.0F, y + 13.0F, 3.0F, Theme.CARD_HEIGHT - 26.0F,
@@ -67,7 +73,7 @@ public final class ModuleCard {
         }
 
         float textX = x + 18.0F;
-        Text name = Text2D.trim(module.name(), (int) width - 170);
+        Text name = Text2D.trim(module.name().copy().formatted(Formatting.BOLD), (int) width - 170);
         Text2D.draw(ctx, name, textX, y + 10.0F, module.enabled() ? accent : Theme.TEXT, false);
         Text description = Text2D.trim(module.description(), (int) width - 170);
         Text2D.draw(ctx, description, textX, y + 26.0F, Theme.TEXT_MUTED, false);
@@ -78,13 +84,13 @@ public final class ModuleCard {
         }
 
         if (module.toggleable()) {
-            float toggleX = x + width - 54.0F;
-            float toggleY = y + (Theme.CARD_HEIGHT - 16.0F) / 2.0F;
+            float toggleX = x + width - 60.0F;
+            float toggleY = y + (Theme.CARD_HEIGHT - 20.0F) / 2.0F;
             float toggle = toggleAnim.value();
-            Render2D.roundedRect(ctx, toggleX, toggleY, 32.0F, 16.0F, 8.0F,
+            Render2D.roundedRect(ctx, toggleX, toggleY, 38.0F, 20.0F, 10.0F,
                     Render2D.mix(Theme.TRACK_OFF, Theme.TRACK_ON, toggle));
-            float knobX = toggleX + 2.0F + toggle * 16.0F;
-            Render2D.roundedRect(ctx, knobX, toggleY + 2.0F, 12.0F, 12.0F, 6.0F, Theme.KNOB);
+            float knobX = toggleX + 2.0F + toggle * 18.0F;
+            Render2D.roundedRect(ctx, knobX, toggleY + 2.0F, 16.0F, 16.0F, 8.0F, Theme.KNOB);
         } else {
             Text2D.drawRight(ctx, Text.translatable("ui.yachiyoc.settings"),
                     x + width - 44.0F, y + 21.0F, Theme.TEXT_MUTED, false);

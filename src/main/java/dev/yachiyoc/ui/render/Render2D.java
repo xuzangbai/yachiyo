@@ -137,8 +137,8 @@ public final class Render2D {
         }
     }
 
-    private static final int MASK_SIZE = 64;
-    private static final int MASK_RADIUS = 18;
+    private static final int MASK_SIZE = 128;
+    private static final int MASK_RADIUS = 40;
     private static final int MASK_CENTER = MASK_SIZE - MASK_RADIUS * 2;
 
     /**
@@ -217,6 +217,16 @@ public final class Render2D {
         roundedRect(ctx, x, y, width, height, radius, border);
         roundedRect(ctx, x + 1.0F, y + 1.0F, width - 2.0F, height - 2.0F,
                 Math.max(0.0F, radius - 1.0F), fill);
+    }
+
+    /** Soft layered elevation shadow. */
+    public static void elevation(DrawContext ctx, float x, float y, float width, float height,
+                                 float radius, int color) {
+        for (int i = 4; i >= 1; i--) {
+            float grow = i * 1.8F;
+            roundedRect(ctx, x - grow, y + grow * 0.7F, width + grow * 2.0F, height + grow * 1.4F,
+                    radius + grow, withAlpha(color, 0.16F / i));
+        }
     }
 
     public static void horizontalLine(DrawContext ctx, float x, float y, float width, int color) {
