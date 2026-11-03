@@ -70,16 +70,22 @@ public final class SearchField {
         Render2D.roundedRect(ctx, x + 9.0F, y + height / 2.0F - 3.0F, 3.0F, 6.0F,
                 1.5F, focused ? Theme.ACCENT : Theme.TEXT_MUTED);
 
-        float textY = y + (height - Text2D.height()) / 2.0F + 1.0F;
+        float textX = x + 16.0F;
+        float textY = y + (height - Text2D.height()) / 2.0F;
+        Text shown;
         if (query.isEmpty()) {
-            Text2D.draw(ctx, placeholder, x + 18.0F, textY, Theme.TEXT_MUTED, false);
+            shown = placeholder;
+            Text2D.draw(ctx, shown, textX + (focused ? 6.0F : 0.0F), textY,
+                    Theme.TEXT_MUTED, false);
         } else {
-            Text shown = Text2D.trim(Text.literal(query), (int) width - 30);
-            Text2D.draw(ctx, shown, x + 10.0F, textY, Theme.TEXT, false);
-            if (focused && (System.currentTimeMillis() / 500L) % 2L == 0L) {
-                float cursorX = x + 18.0F + Text2D.width(Text.literal(query)) + 1.0F;
-                Render2D.fill(ctx, cursorX, y + 5.0F, 1.0F, height - 10.0F, Theme.ACCENT);
-            }
+            shown = Text2D.trim(Text.literal(query), (int) width - 34);
+            Text2D.draw(ctx, shown, textX, textY, Theme.TEXT, false);
+        }
+        if (focused && (System.currentTimeMillis() / 500L) % 2L == 0L) {
+            float cursorX = query.isEmpty()
+                    ? textX
+                    : Math.min(x + width - 3.0F, textX + Text2D.width(shown) + 1.0F);
+            Render2D.fill(ctx, cursorX, textY, 1.0F, Text2D.height(), Theme.ACCENT);
         }
     }
 
