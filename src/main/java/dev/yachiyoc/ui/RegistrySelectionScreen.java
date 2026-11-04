@@ -29,6 +29,8 @@ public final class RegistrySelectionScreen extends Screen {
     private final Screen parent;
     private final RegistryKind kind;
     private final List<RegistryCatalog.Entry> all;
+    private final List<String> categories;
+    private String selectedCategory = RegistryCatalog.CATEGORY_ALL;
     private final SearchField search = new SearchField(0, 0, 1, 1);
 
     private float windowX;
@@ -55,6 +57,7 @@ public final class RegistrySelectionScreen extends Screen {
         this.parent = parent;
         this.kind = setting.kind();
         this.all = RegistryCatalog.entries(kind);
+        this.categories = RegistryCatalog.categories(kind);
         search.setPlaceholder(Text.translatable("selector.yachiyoc.search"));
         search.focus();
     }
@@ -86,6 +89,7 @@ public final class RegistrySelectionScreen extends Screen {
         }
 
         search.render(context, mouseX, mouseY);
+        drawCategories(context, mouseX, mouseY);
         drawPanel(context, true, mouseX, mouseY);
         drawPanel(context, false, mouseX, mouseY);
     }
@@ -98,7 +102,7 @@ public final class RegistrySelectionScreen extends Screen {
 
         search.setBounds(windowX + 18.0F, windowY + 46.0F, windowWidth - 36.0F, 20.0F);
 
-        float panelTop = windowY + 76.0F;
+        float panelTop = windowY + 104.0F;
         float panelBottom = windowY + windowHeight - 14.0F;
         float gap = 12.0F;
         float panelWidth = (windowWidth - 36.0F - gap) / 2.0F;
@@ -115,6 +119,24 @@ public final class RegistrySelectionScreen extends Screen {
         List<RegistryCatalog.Entry> right = selected();
         leftScroll = clamp(leftScroll, 0.0F, maxScroll(left));
         rightScroll = clamp(rightScroll, 0.0F, maxScroll(right));
+    }
+
+    private void drawCategories(DrawContext context, int mouseX, int mouseY) {
+        float x = windowX + 18.0F;
+        float y = windowY + 74.0F;
+        for (String category : categories) {
+            Text label = Text.translatable("selector.yachiyoc.category." + category);
+            float width = Math.min(150.0F, Text2D.width(label) + 16.0F);
+            boolean active = category.equals(selectedCategory);
+            boolean hovered = mouseX >= x && mouseX <= x + width
+                    && mouseY >= y && mouseY <= y + 18.0F;
+            int fill = active ? Render2D.withAlpha(Theme.ACCENT, 0.20F)
+                    : hovered ? Theme.STATE_LAYER : Render2D.withAlpha(Theme.TEXT, 0.04F);
+            Render2D.roundedRect(context, x, y, width, 18.0F, 9.0F, fill);
+            Text2D.draw(context, label, x + 8.0F, y + 5.0F,
+                    active ? Theme.TEXT : Theme.TEXT_MUTED, false);
+            x += width + 5.0F;
+        }
     }
 
     private void drawPanel(DrawContext context, boolean left, int mouseX, int mouseY) {
@@ -178,6 +200,7 @@ public final class RegistrySelectionScreen extends Screen {
     private List<RegistryCatalog.Entry> available() {
         String query = search.query().toLowerCase(Locale.ROOT);
         return all.stream()
+                .filter(entry -> inCategory(entry))
                 .filter(entry -> !setting.contains(entry.id()))
                 .filter(entry -> matches(entry, query))
                 .toList();
@@ -186,9 +209,15 @@ public final class RegistrySelectionScreen extends Screen {
     private List<RegistryCatalog.Entry> selected() {
         String query = search.query().toLowerCase(Locale.ROOT);
         return all.stream()
+                .filter(entry -> inCategory(entry))
                 .filter(entry -> setting.contains(entry.id()))
                 .filter(entry -> matches(entry, query))
                 .toList();
+    }
+
+    private boolean inCategory(RegistryCatalog.Entry entry) {
+        return selectedCategory.equals(RegistryCatalog.CATEGORY_ALL)
+                || selectedCategory.equals(entry.category());
     }
 
     private boolean matches(RegistryCatalog.Entry entry, String query) {
@@ -207,6 +236,9 @@ public final class RegistrySelectionScreen extends Screen {
         if (click.x() >= closeX && click.x() <= closeX + CLOSE_SIZE
                 && click.y() >= closeY && click.y() <= closeY + CLOSE_SIZE) {
             close();
+            return true;
+        }
+        if (clickCategory(click)) {
             return true;
         }
         if (search.mouseClicked(click)) {
@@ -231,6 +263,26 @@ public final class RegistrySelectionScreen extends Screen {
                 save();
                 return true;
             }
+        }
+        return false;
+    }
+
+    private boolean clickCategory(Click click) {
+        float x = windowX + 18.0F;
+        float y = windowY + 74.0F;
+        if (click.y() < y || click.y() > y + 18.0F) {
+            return false;
+        }
+        for (String category : categories) {
+            Text label = Text.translatable("selector.yachiyoc.category." + category);
+            float width = Math.min(150.0F, Text2D.width(label) + 16.0F);
+            if (click.x() >= x && click.x() <= x + width) {
+                selectedCategory = category;
+                leftScroll = 0.0F;
+                rightScroll = 0.0F;
+                return true;
+            }
+            x += width + 5.0F;
         }
         return false;
     }

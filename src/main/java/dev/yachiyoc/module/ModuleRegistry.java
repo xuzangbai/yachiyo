@@ -2,6 +2,10 @@ package dev.yachiyoc.module;
 
 import com.google.gson.JsonElement;
 import dev.yachiyoc.config.ConfigData;
+import dev.yachiyoc.module.impl.client.Colors;
+import dev.yachiyoc.module.impl.client.Config;
+import dev.yachiyoc.module.impl.combat.Aura;
+import dev.yachiyoc.module.impl.misc.Example;
 import dev.yachiyoc.module.setting.Setting;
 
 import java.util.ArrayList;
@@ -19,15 +23,15 @@ public final class ModuleRegistry {
     private final List<Module> modules = new ArrayList<>();
 
     public void bootstrap() {
-        register(new StubModule("aura", ModuleCategory.COMBAT));
+        register(new Aura());
         register(new StubModule("sprint", ModuleCategory.MOVEMENT));
         register(new StubModule("autotool", ModuleCategory.PLAYER));
         register(new StubModule("scaffold", ModuleCategory.WORLD));
         register(new StubModule("hud", ModuleCategory.RENDER));
         register(new StubModule("toolbox", ModuleCategory.TOOLS));
-        register(new ConfigModule());
-        register(new ColorsModule());
-        register(new ExampleModule());
+        register(new Config());
+        register(new Colors());
+        register(new Example());
     }
 
     public void register(Module module) {

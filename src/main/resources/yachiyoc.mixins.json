@@ -4,6 +4,8 @@
   "compatibilityLevel": "JAVA_21",
   "client": [
     "ChatScreenMixin",
+    "ClientCommonNetworkHandlerMixin",
+    "ClientPlayerEntityMixin",
     "ChatHudMixin",
     "FontManagerMixin",
     "MinecraftClientMixin"

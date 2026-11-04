@@ -22,6 +22,16 @@ dependencies {
     modImplementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_version}"
 }
 
+loom {
+    runs {
+        client {
+            client()
+            configName = "Minecraft Client"
+            programArgs "--username", "noc"
+        }
+    }
+}
+
 def soundDir = file('src/main/resources/assets/yachiyoc/textures/sounds')
 def soundNames = soundDir.exists()
         ? soundDir.listFiles().findAll { it.name.endsWith('.ogg') }.collect { it.name.substring(0, it.name.length() - 4) }.sort()

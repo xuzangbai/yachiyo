@@ -1,5 +1,7 @@
-package dev.yachiyoc.module;
+package dev.yachiyoc.module.impl.client;
 
+import dev.yachiyoc.module.Module;
+import dev.yachiyoc.module.ModuleCategory;
 import dev.yachiyoc.module.setting.ColorSetting;
 import dev.yachiyoc.ui.Theme;
 
@@ -7,7 +9,7 @@ import dev.yachiyoc.ui.Theme;
  * Client appearance colors. Every setting writes straight into Theme, so the
  * whole UI updates immediately and the values are saved with the module config.
  */
-public final class ColorsModule extends Module {
+public final class Colors extends Module {
     public final ColorSetting window =
             add(new ColorSetting("client.colors", "window", Theme.WINDOW, v -> Theme.WINDOW = v));
     public final ColorSetting sidebar =
@@ -37,7 +39,7 @@ public final class ColorsModule extends Module {
     public final ColorSetting wip =
             add(new ColorSetting("client.colors", "wip", Theme.WIP, v -> Theme.WIP = v));
 
-    public ColorsModule() {
+    public Colors() {
         super("colors", ModuleCategory.CLIENT, true, false);
     }
 }

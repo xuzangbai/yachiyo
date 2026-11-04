@@ -1,5 +1,6 @@
-package dev.yachiyoc.hud;
+package dev.yachiyoc.hud.element;
 
+import dev.yachiyoc.hud.HudElement;
 import dev.yachiyoc.module.setting.BoolSetting;
 import dev.yachiyoc.module.setting.DoubleSetting;
 import dev.yachiyoc.ui.render.Render2D;

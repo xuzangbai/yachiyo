@@ -1,5 +1,7 @@
-package dev.yachiyoc.module;
+package dev.yachiyoc.module.impl.misc;
 
+import dev.yachiyoc.module.Module;
+import dev.yachiyoc.module.ModuleCategory;
 import dev.yachiyoc.module.setting.BoolSetting;
 import dev.yachiyoc.module.setting.ButtonSetting;
 import dev.yachiyoc.module.setting.ColorSetting;
@@ -13,14 +15,14 @@ import net.minecraft.text.Text;
  * Demo module used to exercise the UI: expand/collapse, boolean toggle,
  * slider drag, enum cycling and color cycling. It has no gameplay effect.
  */
-public final class ExampleModule extends Module {
+public final class Example extends Module {
     public final BoolSetting announce = add(new BoolSetting("example", "announce", true));
     public final DoubleSetting range = add(new DoubleSetting("example", "range", 4.5, 1.0, 8.0, 0.1));
     public final EnumSetting<Mode> mode = add(new EnumSetting<>("example", "mode", Mode.class, Mode.LEGIT));
     public final ColorSetting color = add(new ColorSetting("example", "color", 0xFF64B5F6));
     public final ButtonSetting reset = add(new ButtonSetting("example", "reset", this::resetValues));
 
-    public ExampleModule() {
+    public Example() {
         super("example", ModuleCategory.MISC, false);
     }
 

@@ -2,6 +2,9 @@ package dev.yachiyoc.hud;
 
 import com.google.gson.JsonElement;
 import dev.yachiyoc.config.ConfigData;
+import dev.yachiyoc.hud.element.DropDisplayHud;
+import dev.yachiyoc.hud.element.ItemDisplayHud;
+import dev.yachiyoc.hud.element.LogoHud;
 import dev.yachiyoc.module.setting.Setting;
 import dev.yachiyoc.ui.render.Render2D;
 import net.minecraft.client.gui.DrawContext;

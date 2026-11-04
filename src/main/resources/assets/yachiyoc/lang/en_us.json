@@ -1,7 +1,6 @@
 {
   "key.category.yachiyoc.main": "YachiyoC",
   "key.yachiyoc.clickgui": "Open ClickGUI",
-
   "category.yachiyoc.combat": "Combat",
   "category.yachiyoc.movement": "Movement",
   "category.yachiyoc.player": "Player",
@@ -10,9 +9,8 @@
   "category.yachiyoc.misc": "Misc",
   "category.yachiyoc.tools": "Fun Tools",
   "category.yachiyoc.client": "Client",
-
-  "module.yachiyoc.aura": "Aura",
-  "module.yachiyoc.aura.description": "Placeholder — combat logic is not implemented yet.",
+  "module.yachiyoc.aura": "Kill Aura",
+  "module.yachiyoc.aura.description": "Single-target aura with selectable rotation timing.",
   "module.yachiyoc.sprint": "Sprint",
   "module.yachiyoc.sprint.description": "Placeholder — movement logic is not implemented yet.",
   "module.yachiyoc.autotool": "AutoTool",
@@ -27,8 +25,6 @@
   "setting.yachiyoc.client.config.font.description": "Put .ttf files in %s, restart the game, then select one here. Only Ma Shan Zheng is bundled.",
   "ui.yachiyoc.no_description": "No description",
   "setting.yachiyoc.client.config.font.value.vanilla": "Default",
-
-
   "setting.yachiyoc.client.config.font.value.ma_shan": "Ma Shan Zheng",
   "setting.yachiyoc.client.config.font.value.external": "External Font",
   "setting.yachiyoc.client.config.chat_prefix": "Client Prefix Text",
@@ -44,8 +40,6 @@
   "module.yachiyoc.cancel": "Cancel",
   "module.yachiyoc.colors": "Colors",
   "module.yachiyoc.colors.description": "Client theme colors; all changes apply instantly.",
-
-
   "setting.yachiyoc.client.colors.window": "Window",
   "setting.yachiyoc.client.colors.sidebar": "Sidebar",
   "setting.yachiyoc.client.colors.content": "Content",
@@ -69,7 +63,6 @@
   "module.yachiyoc.example.enabled": "Example module enabled — UI demo only.",
   "module.yachiyoc.example.disabled": "Example module disabled.",
   "module.yachiyoc.example.reset.done": "Example settings reset.",
-
   "setting.yachiyoc.client.bind": "Keybind",
   "setting.yachiyoc.client.trigger": "Trigger",
   "setting.yachiyoc.client.trigger.value.toggle": "Toggle",
@@ -82,7 +75,6 @@
   "setting.yachiyoc.example.mode.value.safe": "Safe",
   "setting.yachiyoc.example.mode.value.rage": "Rage",
   "setting.yachiyoc.example.reset": "Reset Settings",
-
   "ui.yachiyoc.settings": "Settings",
   "ui.yachiyoc.search": "Search modules…",
   "ui.yachiyoc.categories": "CATEGORIES",
@@ -94,7 +86,6 @@
   "ui.yachiyoc.wip": "WIP",
   "ui.yachiyoc.open": "Open: %s   |   %s",
   "ui.yachiyoc.modules": "%s modules",
-
   "hud.yachiyoc.editor": "HUD Editor",
   "hud.yachiyoc.editor.short": "HUD",
   "hud.yachiyoc.editor.description": "Add, move and configure HUD elements",
@@ -144,7 +135,6 @@
   "selector.yachiyoc.empty_available": "Nothing available",
   "selector.yachiyoc.empty_selected": "Nothing selected",
   "selector.yachiyoc.button": "Select (%s)",
-
   "command.yachiyoc.clickgui.desc": "Open the ClickGUI",
   "command.yachiyoc.help.desc": "List client commands",
   "command.yachiyoc.prefix.desc": "Change the client command prefix",
@@ -152,29 +142,57 @@
   "command.yachiyoc.language.desc": "Switch the UI language",
   "command.yachiyoc.modules.desc": "List registered modules",
   "command.yachiyoc.config.desc": "Save or reload config",
-
   "command.yachiyoc.help.header": "Commands (prefix %s):",
   "command.yachiyoc.help.entry": "%s%s — %s",
   "command.yachiyoc.unknown": "Unknown command '%s'. Try %shelp.",
   "command.yachiyoc.failed": "Command failed: %s",
-
   "command.yachiyoc.prefix.usage": "Usage: %sprefix <text>",
   "command.yachiyoc.prefix.invalid": "Prefix must be 1-4 characters and cannot contain spaces or '/'.",
   "command.yachiyoc.prefix.set": "Prefix set to '%s'.",
-
   "command.yachiyoc.openkey.unknown": "Unknown key. Try: up, down, left, right, rshift, lshift, enter, or a GLFW code.",
   "command.yachiyoc.openkey.set": "ClickGUI key set to %s.",
-
   "command.yachiyoc.language.usage": "Usage: %slanguage <auto|en_us|zh_cn>",
   "command.yachiyoc.language.current": "Current language: %s",
   "command.yachiyoc.language.set": "Language set to %s.",
-
   "command.yachiyoc.modules.empty": "empty",
   "command.yachiyoc.modules.line": "%s: %s",
   "command.yachiyoc.state.on": "on",
   "command.yachiyoc.state.off": "off",
-
   "command.yachiyoc.config.usage": "Usage: %sconfig <save|reload>",
   "command.yachiyoc.config.saved": "Config saved.",
-  "command.yachiyoc.config.reloaded": "Config reloaded."
+  "command.yachiyoc.config.reloaded": "Config reloaded.",
+  "setting.yachiyoc.aura.range": "Range",
+  "setting.yachiyoc.aura.players": "Players",
+  "setting.yachiyoc.aura.mobs": "Mobs",
+  "setting.yachiyoc.aura.animals": "Animals",
+  "setting.yachiyoc.aura.through_walls": "Through Walls",
+  "setting.yachiyoc.aura.rotation": "Rotation",
+  "setting.yachiyoc.aura.rotation.value.follow": "Follow Client",
+  "setting.yachiyoc.aura.rotation.value.none": "None",
+  "setting.yachiyoc.aura.rotation.value.delay_movement": "Delay Movement",
+  "setting.yachiyoc.aura.rotation.value.movement_post": "Movement Post",
+  "setting.yachiyoc.aura.rotation.value.legacy_silent": "Legacy Silent",
+  "setting.yachiyoc.client.config.rotation_mode": "Default Rotation",
+  "setting.yachiyoc.client.config.rotation_mode.value.none": "None",
+  "setting.yachiyoc.client.config.rotation_mode.value.delay_movement": "Delay Movement",
+  "setting.yachiyoc.client.config.rotation_mode.value.movement_post": "Movement Post",
+  "setting.yachiyoc.client.config.rotation_mode.value.legacy_silent": "Legacy Silent",
+  "setting.yachiyoc.client.config.rotation_mode.description": "Default timing used by combat modules set to Follow Client.",
+  "setting.yachiyoc.aura.rotation.description": "Follow Client uses the client default; other values override it for this module.",
+  "selector.yachiyoc.entity_target": "Target Selection",
+  "selector.yachiyoc.category.all": "All",
+  "selector.yachiyoc.category.players": "Players",
+  "selector.yachiyoc.category.monsters": "Monsters",
+  "selector.yachiyoc.category.animals": "Animals",
+  "selector.yachiyoc.category.villagers": "Villagers",
+  "selector.yachiyoc.category.golems": "Golems",
+  "selector.yachiyoc.category.projectiles": "Projectiles",
+  "selector.yachiyoc.category.water": "Water",
+  "selector.yachiyoc.category.ambient": "Ambient",
+  "selector.yachiyoc.category.other": "Other",
+  "setting.yachiyoc.aura.targets": "Targets",
+  "setting.yachiyoc.aura.targets.description": "Living entities and attack projectiles. Categories follow Meteor-style grouping.",
+  "selector.yachiyoc.category.vehicles": "Vehicles",
+  "setting.yachiyoc.aura.rotation.value.silent_movement": "Silent Movement",
+  "setting.yachiyoc.client.config.rotation_mode.value.silent_movement": "Silent Movement"
 }
