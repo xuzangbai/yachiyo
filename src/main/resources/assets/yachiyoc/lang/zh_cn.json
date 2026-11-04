@@ -191,7 +191,7 @@
   "selector.yachiyoc.category.ambient": "环境",
   "selector.yachiyoc.category.other": "其它",
   "setting.yachiyoc.aura.targets": "目标",
-  "setting.yachiyoc.aura.targets.description": "只包含生物和攻击投掷物；分类沿用 Meteor 风格的生物分组。",
+  "setting.yachiyoc.aura.targets.description": "尽量不要添加无法被攻击的实体，比如箭之类的（攻击时会被踢，但我懒得修:)）",
   "selector.yachiyoc.category.vehicles": "载具",
   "setting.yachiyoc.aura.rotation.value.silent_movement": "静默移动",
   "setting.yachiyoc.client.config.rotation_mode.value.silent_movement": "静默移动"

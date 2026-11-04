@@ -2,6 +2,10 @@
 .gradle/
 build/
 
+# IDE compiler output (Eclipse / VS Code Java: classes + copied resources)
+bin/
+out/
+
 # Development runtime (assets, logs, worlds, local config)
 run/
 *.log

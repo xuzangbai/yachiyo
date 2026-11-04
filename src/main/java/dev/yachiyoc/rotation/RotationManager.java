@@ -15,8 +15,8 @@ import net.minecraft.util.math.MathHelper;
  *   <li>{@link RotationMode#NONE}: no rotation at all, the action runs immediately.</li>
  *   <li>{@link RotationMode#DELAY_MOVEMENT}: the entity rotation is written before the movement
  *       packet and restored right after it, the action is sent on the next tick.</li>
- *   <li>{@link RotationMode#MOVEMENT_POST}: kept as an alias of {@code DELAY_MOVEMENT} (the old
- *       config value must keep working).</li>
+ *   <li>{@link RotationMode#MOVEMENT_POST}: 与 {@code DELAY_MOVEMENT} 同实现。真后置（移动包之后补
+ *       转头包再出手）实测在低版本服务端上会被按 Post 判掉、并触发拉回，所以保留旧别名。</li>
  *   <li>{@link RotationMode#SILENT_MOVEMENT}: Hachimi style, the entity rotation is held for the
  *       whole tick so the movement packet carries it, and the camera is restored at tick end.</li>
  *   <li>{@link RotationMode#LEGACY_SILENT}: "低版本静默". A real movement packet carrying the aim
@@ -51,9 +51,6 @@ public final class RotationManager {
     private static Runnable postAttack;
     private static float postAttackYaw;
     private static float postAttackPitch;
-    private static boolean movementPostActive;
-    private static float movementPostOldYaw;
-    private static float movementPostOldPitch;
 
     static {
         ClientTickEvents.START_CLIENT_TICK.register(client -> flushPostAttack());
@@ -99,6 +96,8 @@ public final class RotationManager {
             return;
         }
         if (mode == RotationMode.MOVEMENT_POST) {
+            // 真后置（移动包 → 补转头包 → 出手）实测更差：低版本服务端按 Post 判掉、还会拉回，
+            // 所以这里继续沿用延迟移动的实现。
             mode = RotationMode.DELAY_MOVEMENT;
         }
         if (mode == RotationMode.LEGACY_SILENT) {
@@ -123,18 +122,24 @@ public final class RotationManager {
             return;
         }
 
+        // 同一 tick 内重复请求时不要覆盖“相机原始角度”，否则恢复时视角会停在上一刀的瞄准角。
+        boolean carryOver = pending && !applied;
         pending = true;
         applied = false;
         pendingMode = mode;
-        oldYaw = player.getYaw();
-        oldPitch = player.getPitch();
+        if (!carryOver) {
+            oldYaw = player.getYaw();
+            oldPitch = player.getPitch();
+        }
         targetYaw = yaw;
         targetPitch = MathHelper.clamp(pitch, -90.0F, 90.0F);
         pendingAction = action;
         if (mode == RotationMode.DELAY_MOVEMENT) {
+            // 延迟移动：本 tick 的移动包就要带上瞄准角，所以先写实体 yaw。
             player.setYaw(targetYaw);
             player.setPitch(targetPitch);
         }
+        // 移动后置：不动实体 yaw，本 tick 的移动包保持相机角，转头包在移动包之后补发。
     }
 
     /**
@@ -162,6 +167,10 @@ public final class RotationManager {
         if (player == null || player.networkHandler == null) {
             return false;
         }
+        if (player.hasVehicle()) {
+            // 骑乘时位置由载具同步，服务端只读旋转，发纯 look 包就够了。
+            return sendLook(player, yaw, pitch);
+        }
         ServerMovementState.ensure(player);
         float safePitch = MathHelper.clamp(pitch, -90.0F, 90.0F);
         // Keep the yaw continuous with what the server already has, so the server side unwrap
@@ -171,32 +180,24 @@ public final class RotationManager {
         if (!ServerMovementState.rotationDiffers(safeYaw, safePitch)) {
             return false;
         }
-        PlayerMoveC2SPacket packet;
-        if (player.hasVehicle()) {
-            // Movement packets are ignored while riding, only the rotation part is read.
-            packet = new PlayerMoveC2SPacket.LookAndOnGround(
-                    safeYaw, safePitch, ServerMovementState.onGround(), player.horizontalCollision);
-        } else {
-            // Anchor the packet at the position the server already has: a low version server would
-            // read any delta as a movement and answer with a set back. If the mirror is obviously
-            // out of sync (teleport / respawn), fall back to the real position instead of replaying
-            // a stale one.
-            double px = ServerMovementState.x();
-            double py = ServerMovementState.y();
-            double pz = ServerMovementState.z();
-            double dx = player.getX() - px;
-            double dy = player.getY() - py;
-            double dz = player.getZ() - pz;
-            if (dx * dx + dy * dy + dz * dz > POSITION_TRUST_SQ) {
-                px = player.getX();
-                py = player.getY();
-                pz = player.getZ();
-            }
-            packet = new PlayerMoveC2SPacket.Full(
-                    px, py, pz,
-                    safeYaw, safePitch, ServerMovementState.onGround(), player.horizontalCollision);
+        // Anchor the packet at the position the server already has: a low version server would
+        // read any delta as a movement and answer with a set back. If the mirror is obviously
+        // out of sync (teleport / respawn), fall back to the real position instead of replaying
+        // a stale one.
+        double px = ServerMovementState.x();
+        double py = ServerMovementState.y();
+        double pz = ServerMovementState.z();
+        double dx = player.getX() - px;
+        double dy = player.getY() - py;
+        double dz = player.getZ() - pz;
+        if (dx * dx + dy * dy + dz * dz > POSITION_TRUST_SQ) {
+            px = player.getX();
+            py = player.getY();
+            pz = player.getZ();
         }
-        player.networkHandler.sendPacket(packet);
+        player.networkHandler.sendPacket(new PlayerMoveC2SPacket.Full(
+                px, py, pz,
+                safeYaw, safePitch, ServerMovementState.onGround(), player.horizontalCollision));
         return true;
     }
 
@@ -216,12 +217,7 @@ public final class RotationManager {
             return;
         }
         applied = true;
-        if (pendingMode == RotationMode.DELAY_MOVEMENT
-                || pendingMode == RotationMode.MOVEMENT_POST) {
-            return;
-        }
-        player.setYaw(targetYaw);
-        player.setPitch(targetPitch);
+        // 实体 yaw 已经在 run() 里写成瞄准角（延迟移动），这里不需要再动。
     }
 
     private static void syncClientRotation(ClientPlayerEntity player) {
@@ -235,17 +231,18 @@ public final class RotationManager {
         }
     }
 
+    /**
+     * Called at the return of {@code ClientPlayerEntity#sendMovementPackets}, i.e. after this tick's
+     * movement packet has already been written to the connection.
+     *
+     * <p>The entity rotation is restored here and the action is fired at the beginning of the next
+     * tick, so the attack goes out {@code move(aim) → attack → move(camera)}.
+     */
     public static void afterMovementPacket(ClientPlayerEntity player) {
         if (!applied) {
             return;
         }
-        if (pendingMode == RotationMode.MOVEMENT_POST && pendingAction != null) {
-            movementPostActive = true;
-            movementPostOldYaw = oldYaw;
-            movementPostOldPitch = oldPitch;
-            sendFull(player, targetYaw, targetPitch);
-            pendingAction.run();
-        } else if (pendingMode == RotationMode.DELAY_MOVEMENT && pendingAction != null) {
+        if (pendingMode == RotationMode.DELAY_MOVEMENT && pendingAction != null) {
             postAttack = pendingAction;
             postAttackYaw = targetYaw;
             postAttackPitch = targetPitch;
@@ -258,6 +255,16 @@ public final class RotationManager {
     }
 
     public static void clearAim() {
+        if (pending && !applied && pendingMode == RotationMode.DELAY_MOVEMENT) {
+            // 请求还没过 sendMovementPackets 就被取消（例如同一 tick 里模块被关掉），
+            // 这里必须把实体角度还原，否则视角会永远停在瞄准角。
+            MinecraftClient client = MinecraftClient.getInstance();
+            ClientPlayerEntity player = client.player;
+            if (player != null) {
+                player.setYaw(oldYaw);
+                player.setPitch(oldPitch);
+            }
+        }
         pending = false;
         applied = false;
         pendingAction = null;
@@ -276,14 +283,6 @@ public final class RotationManager {
     }
 
     private static void endTick() {
-        if (movementPostActive) {
-            MinecraftClient client = MinecraftClient.getInstance();
-            ClientPlayerEntity player = client.player;
-            if (player != null) {
-                sendFull(player, movementPostOldYaw, movementPostOldPitch);
-            }
-            movementPostActive = false;
-        }
         if (hachimiActive) {
             postAttack = hachimiAction;
             postAttackYaw = hachimiYaw;
@@ -300,8 +299,22 @@ public final class RotationManager {
             hachimiAction = null;
         }
         if (pending && !applied) {
+            // 本 tick 没有走到 sendMovementPackets（骑乘载具走的是载具分支），不能再等：
+            // 把实体角度还原掉，动作直接补发，避免视角卡在瞄准角、整刀被丢掉。
+            MinecraftClient client = MinecraftClient.getInstance();
+            ClientPlayerEntity player = client.player;
+            Runnable action = pendingAction;
+            RotationMode mode = pendingMode;
+            if (player != null && mode == RotationMode.DELAY_MOVEMENT) {
+                player.setYaw(oldYaw);
+                player.setPitch(oldPitch);
+            }
             pending = false;
+            applied = false;
             pendingAction = null;
+            if (action != null) {
+                action.run();
+            }
         }
     }
 
@@ -328,30 +341,26 @@ public final class RotationManager {
         }
     }
 
-    public static void sendLook(ClientPlayerEntity player, float yaw, float pitch) {
-        if (player.networkHandler == null) {
-            return;
+    /**
+     * Rotates the server side only, with a look-only movement packet: no position is re-sent and the
+     * client camera / entity rotation are untouched.
+     *
+     * @return true when a packet was actually sent (the server rotation changed)
+     */
+    public static boolean sendLook(ClientPlayerEntity player, float yaw, float pitch) {
+        if (player == null || player.networkHandler == null) {
+            return false;
+        }
+        ServerMovementState.ensure(player);
+        float base = ServerMovementState.yaw();
+        float safeYaw = base + MathHelper.wrapDegrees(yaw - base);
+        float safePitch = MathHelper.clamp(pitch, -90.0F, 90.0F);
+        if (!ServerMovementState.rotationDiffers(safeYaw, safePitch)) {
+            return false;
         }
         player.networkHandler.sendPacket(new PlayerMoveC2SPacket.LookAndOnGround(
-                yaw, pitch, player.isOnGround(), player.horizontalCollision));
-    }
-
-    public static void sendFullAt(ClientPlayerEntity player, double x, double y, double z,
-                                  float yaw, float pitch) {
-        if (player.networkHandler == null) {
-            return;
-        }
-        player.networkHandler.sendPacket(new PlayerMoveC2SPacket.Full(
-                x, y, z, yaw, pitch, player.isOnGround(), player.horizontalCollision));
-    }
-
-    public static void sendFull(ClientPlayerEntity player, float yaw, float pitch) {
-        if (player.networkHandler == null) {
-            return;
-        }
-        player.networkHandler.sendPacket(new PlayerMoveC2SPacket.Full(
-                player.getX(), player.getY(), player.getZ(), yaw, pitch,
-                player.isOnGround(), player.horizontalCollision));
+                safeYaw, safePitch, ServerMovementState.onGround(), player.horizontalCollision));
+        return true;
     }
 
     public static float[] anglesTo(double dx, double dy, double dz) {

@@ -191,7 +191,7 @@
   "selector.yachiyoc.category.ambient": "Ambient",
   "selector.yachiyoc.category.other": "Other",
   "setting.yachiyoc.aura.targets": "Targets",
-  "setting.yachiyoc.aura.targets.description": "Living entities and attack projectiles. Categories follow Meteor-style grouping.",
+  "setting.yachiyoc.aura.targets.description": "Try not to add entities that cannot be attacked, such as arrows (attacking them may get you kicked, but I'm too lazy to fix it :))",
   "selector.yachiyoc.category.vehicles": "Vehicles",
   "setting.yachiyoc.aura.rotation.value.silent_movement": "Silent Movement",
   "setting.yachiyoc.client.config.rotation_mode.value.silent_movement": "Silent Movement"
