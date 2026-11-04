@@ -3,7 +3,13 @@
   "package": "dev.yachiyoc.mixin",
   "compatibilityLevel": "JAVA_21",
   "client": [
-    "ChatScreenMixin"
+    "ClientPlayerEntityAccessor",
+    "ChatScreenMixin",
+    "ClientCommonNetworkHandlerMixin",
+    "ClientPlayerEntityMixin",
+    "ChatHudMixin",
+    "FontManagerMixin",
+    "MinecraftClientMixin"
   ],
   "injectors": {
     "defaultRequire": 1

@@ -31,7 +31,7 @@ loom {
         }
     }
 }
-
+    //改你的，这是我的测试id
 def soundDir = file('src/main/resources/assets/yachiyoc/textures/sounds')
 def soundNames = soundDir.exists()
         ? soundDir.listFiles().findAll { it.name.endsWith('.ogg') }.collect { it.name.substring(0, it.name.length() - 4) }.sort()

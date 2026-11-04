@@ -3,6 +3,7 @@
   "package": "dev.yachiyoc.mixin",
   "compatibilityLevel": "JAVA_21",
   "client": [
+    "ClientPlayerEntityAccessor",
     "ChatScreenMixin",
     "ClientCommonNetworkHandlerMixin",
     "ClientPlayerEntityMixin",

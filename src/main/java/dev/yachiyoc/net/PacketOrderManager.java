@@ -11,12 +11,17 @@ import net.minecraft.network.packet.c2s.play.PlayerMoveC2SPacket;
  * Tracks the outgoing packet order and delays combat actions until the next
  * server transaction. This is the part that prevents attack-after-movement
  * "Post" flags.
+ *
+ * <p>It also feeds every outgoing movement packet into {@link ServerMovementState}, which is what
+ * the silent / low version rotation modes read to know where the server thinks the player is and
+ * which rotation it is currently holding.
  */
 public final class PacketOrderManager {
     private static long lastMovementTick;
     private static long lastAttackTick;
     private static boolean movementThisTick;
     private static boolean attackThisTick;
+    private static boolean suppressNextMovement;
 
     private PacketOrderManager() {
     }
@@ -30,13 +35,24 @@ public final class PacketOrderManager {
     }
 
     public static void onSend(Packet<?> packet) {
-        if (packet instanceof PlayerMoveC2SPacket) {
+        if (packet instanceof PlayerMoveC2SPacket move) {
+            // Track before the suppression check: a suppressed packet never reaches the server,
+            // so it must not be folded into the mirror either.
+            if (suppressNextMovement) {
+                suppressNextMovement = false;
+                return;
+            }
+            ServerMovementState.onMovePacket(move);
             movementThisTick = true;
             lastMovementTick = clientTick();
         } else if (packet instanceof PlayerInteractEntityC2SPacket) {
             attackThisTick = true;
             lastAttackTick = clientTick();
         }
+    }
+
+    public static void suppressNextMovement() {
+        suppressNextMovement = true;
     }
 
     public static boolean movementThisTick() {

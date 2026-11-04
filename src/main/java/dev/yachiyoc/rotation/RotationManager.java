@@ -1,16 +1,34 @@
 package dev.yachiyoc.rotation;
 
+import dev.yachiyoc.mixin.ClientPlayerEntityAccessor;
+import dev.yachiyoc.net.ServerMovementState;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.network.ClientPlayerEntity;
+import net.minecraft.network.packet.c2s.play.PlayerMoveC2SPacket;
 import net.minecraft.util.math.MathHelper;
 
 /**
- * Hachimi-style silent movement: the player entity yaw is used for the
- * movement packet, the camera is restored at the end of the tick, and the
- * attack is sent on the next tick before movement.
+ * Rotation timing for combat actions.
+ *
+ * <ul>
+ *   <li>{@link RotationMode#NONE}: no rotation at all, the action runs immediately.</li>
+ *   <li>{@link RotationMode#DELAY_MOVEMENT}: the entity rotation is written before the movement
+ *       packet and restored right after it, the action is sent on the next tick.</li>
+ *   <li>{@link RotationMode#MOVEMENT_POST}: kept as an alias of {@code DELAY_MOVEMENT} (the old
+ *       config value must keep working).</li>
+ *   <li>{@link RotationMode#SILENT_MOVEMENT}: Hachimi style, the entity rotation is held for the
+ *       whole tick so the movement packet carries it, and the camera is restored at tick end.</li>
+ *   <li>{@link RotationMode#LEGACY_SILENT}: "低版本静默". A real movement packet carrying the aim
+ *       rotation is pushed at the <em>server known position</em>, the action runs in the very same
+ *       tick right after it, and the camera is never touched. Vanilla pushes the camera rotation
+ *       back later in the same tick (see {@link #beforeMovementPacket}).</li>
+ * </ul>
  */
 public final class RotationManager {
+    /** How far the mirrored server position may be from the player before it is not trusted. */
+    private static final double POSITION_TRUST_SQ = 3.0D * 3.0D;
+
     private static RotationMode defaultMode = RotationMode.SILENT_MOVEMENT;
     private static boolean pending;
     private static RotationMode pendingMode;
@@ -30,12 +48,6 @@ public final class RotationManager {
     private static float hachimiOldBodyYaw;
     private static Runnable hachimiAction;
 
-    private static boolean legacyActive;
-    private static float legacyOldYaw;
-    private static float legacyOldPitch;
-    private static double legacyX;
-    private static double legacyY;
-    private static double legacyZ;
     private static Runnable postAttack;
     private static float postAttackYaw;
     private static float postAttackPitch;
@@ -44,7 +56,6 @@ public final class RotationManager {
     private static float movementPostOldPitch;
 
     static {
-        ClientTickEvents.START_CLIENT_TICK.register(client -> flushLegacyRestore());
         ClientTickEvents.START_CLIENT_TICK.register(client -> flushPostAttack());
         ClientTickEvents.END_CLIENT_TICK.register(client -> endTick());
     }
@@ -91,19 +102,7 @@ public final class RotationManager {
             mode = RotationMode.DELAY_MOVEMENT;
         }
         if (mode == RotationMode.LEGACY_SILENT) {
-            // Full/last-position snap is unsafe across current Via versions.
-            // Use the stable native silent path until a real legacy profile exists.
-            mode = RotationMode.SILENT_MOVEMENT;
-        }
-        if (mode == RotationMode.LEGACY_SILENT) {
-            legacyActive = true;
-            legacyOldYaw = player.lastYaw;
-            legacyOldPitch = player.lastPitch;
-            legacyX = player.lastX;
-            legacyY = player.lastY;
-            legacyZ = player.lastZ;
-            sendFullAt(player, legacyX, legacyY, legacyZ, yaw, pitch);
-            action.run();
+            runLegacySilent(player, yaw, pitch, action);
             return;
         }
         if (mode == RotationMode.SILENT_MOVEMENT) {
@@ -136,10 +135,83 @@ public final class RotationManager {
             player.setYaw(targetYaw);
             player.setPitch(targetPitch);
         }
-
     }
 
+    /**
+     * Low version silent rotation: rotate only the server side.
+     *
+     * <p>Old protocol versions (1.8 ~ 1.20.7, i.e. everything Via translates down to) validate the
+     * attack against the last rotation they received, and they only accept that rotation when it
+     * arrives on a movement packet. So the aim is pushed as a real movement packet anchored at the
+     * position the server already has (no movement, no set back), the attack follows in the same
+     * tick, and the client camera / entity rotation stay untouched. The vanilla movement packet of
+     * the same tick carries the camera rotation back, which re-syncs the server.
+     */
+    private static void runLegacySilent(ClientPlayerEntity player, float yaw, float pitch, Runnable action) {
+        snapAim(player, yaw, pitch);
+        action.run();
+    }
+
+    /**
+     * Sends a movement packet that makes the server look at {@code (yaw, pitch)} without moving the
+     * player and without touching the client camera.
+     *
+     * @return true when a packet was actually sent (the server rotation changed)
+     */
+    public static boolean snapAim(ClientPlayerEntity player, float yaw, float pitch) {
+        if (player == null || player.networkHandler == null) {
+            return false;
+        }
+        ServerMovementState.ensure(player);
+        float safePitch = MathHelper.clamp(pitch, -90.0F, 90.0F);
+        // Keep the yaw continuous with what the server already has, so the server side unwrap
+        // (and every "rotation diff" check built on top of it) sees a small delta.
+        float safeYaw = ServerMovementState.yaw()
+                + MathHelper.wrapDegrees(yaw - ServerMovementState.yaw());
+        if (!ServerMovementState.rotationDiffers(safeYaw, safePitch)) {
+            return false;
+        }
+        PlayerMoveC2SPacket packet;
+        if (player.hasVehicle()) {
+            // Movement packets are ignored while riding, only the rotation part is read.
+            packet = new PlayerMoveC2SPacket.LookAndOnGround(
+                    safeYaw, safePitch, ServerMovementState.onGround(), player.horizontalCollision);
+        } else {
+            // Anchor the packet at the position the server already has: a low version server would
+            // read any delta as a movement and answer with a set back. If the mirror is obviously
+            // out of sync (teleport / respawn), fall back to the real position instead of replaying
+            // a stale one.
+            double px = ServerMovementState.x();
+            double py = ServerMovementState.y();
+            double pz = ServerMovementState.z();
+            double dx = player.getX() - px;
+            double dy = player.getY() - py;
+            double dz = player.getZ() - pz;
+            if (dx * dx + dy * dy + dz * dz > POSITION_TRUST_SQ) {
+                px = player.getX();
+                py = player.getY();
+                pz = player.getZ();
+            }
+            packet = new PlayerMoveC2SPacket.Full(
+                    px, py, pz,
+                    safeYaw, safePitch, ServerMovementState.onGround(), player.horizontalCollision);
+        }
+        player.networkHandler.sendPacket(packet);
+        return true;
+    }
+
+    /**
+     * Called at the head of {@code ClientPlayerEntity#sendMovementPackets}.
+     *
+     * <p>Vanilla decides "do I have to send a rotation" by comparing the entity rotation with
+     * {@code lastYawClient/lastPitchClient}, which it only updates when it sent a packet itself.
+     * After a silent snap those fields still describe the camera, so vanilla would keep quiet and
+     * the server would stay rotated at the aim - that is what makes movement get corrected and
+     * attacks land on a stale rotation. Re-pointing them at the rotation the server really holds
+     * makes vanilla push the camera rotation at exactly the right moment, for every mode.
+     */
     public static void beforeMovementPacket(ClientPlayerEntity player) {
+        syncClientRotation(player);
         if (applied || !pending) {
             return;
         }
@@ -150,6 +222,17 @@ public final class RotationManager {
         }
         player.setYaw(targetYaw);
         player.setPitch(targetPitch);
+    }
+
+    private static void syncClientRotation(ClientPlayerEntity player) {
+        if (player == null || player.networkHandler == null) {
+            return;
+        }
+        ServerMovementState.ensure(player);
+        if (player instanceof ClientPlayerEntityAccessor accessor) {
+            accessor.yachiyoc$setLastYawClient(ServerMovementState.yaw());
+            accessor.yachiyoc$setLastPitchClient(ServerMovementState.pitch());
+        }
     }
 
     public static void afterMovementPacket(ClientPlayerEntity player) {
@@ -190,18 +273,6 @@ public final class RotationManager {
         }
         hachimiActive = false;
         hachimiAction = null;
-    }
-
-    private static void flushLegacyRestore() {
-        if (!legacyActive) {
-            return;
-        }
-        MinecraftClient client = MinecraftClient.getInstance();
-        ClientPlayerEntity player = client.player;
-        if (player != null) {
-            sendFullAt(player, legacyX, legacyY, legacyZ, legacyOldYaw, legacyOldPitch);
-        }
-        legacyActive = false;
     }
 
     private static void endTick() {
@@ -261,8 +332,8 @@ public final class RotationManager {
         if (player.networkHandler == null) {
             return;
         }
-        player.networkHandler.sendPacket(new net.minecraft.network.packet.c2s.play.PlayerMoveC2SPacket.LookAndOnGround(
-                yaw, pitch, player.isOnGround(), false));
+        player.networkHandler.sendPacket(new PlayerMoveC2SPacket.LookAndOnGround(
+                yaw, pitch, player.isOnGround(), player.horizontalCollision));
     }
 
     public static void sendFullAt(ClientPlayerEntity player, double x, double y, double z,
@@ -270,17 +341,17 @@ public final class RotationManager {
         if (player.networkHandler == null) {
             return;
         }
-        player.networkHandler.sendPacket(new net.minecraft.network.packet.c2s.play.PlayerMoveC2SPacket.Full(
-                x, y, z, yaw, pitch, player.isOnGround(), false));
+        player.networkHandler.sendPacket(new PlayerMoveC2SPacket.Full(
+                x, y, z, yaw, pitch, player.isOnGround(), player.horizontalCollision));
     }
 
     public static void sendFull(ClientPlayerEntity player, float yaw, float pitch) {
         if (player.networkHandler == null) {
             return;
         }
-        player.networkHandler.sendPacket(new net.minecraft.network.packet.c2s.play.PlayerMoveC2SPacket.Full(
+        player.networkHandler.sendPacket(new PlayerMoveC2SPacket.Full(
                 player.getX(), player.getY(), player.getZ(), yaw, pitch,
-                player.isOnGround(), false));
+                player.isOnGround(), player.horizontalCollision));
     }
 
     public static float[] anglesTo(double dx, double dy, double dz) {

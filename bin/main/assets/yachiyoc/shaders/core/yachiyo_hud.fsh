@@ -37,11 +37,11 @@ void main() {
 
     // Icy blue/white gradient with an animated horizontal highlight.
     float sweep = 0.5 + 0.5 * sin(texCoord0.x * 8.0 - phase);
-    vec3 topBlue = vec3(0.72, 0.91, 1.00);
-    vec3 iceWhite = vec3(0.96, 0.99, 1.00);
-    vec3 deepBlue = vec3(0.20, 0.62, 1.00);
+    vec3 topBlue = vec3(0.78, 0.68, 1.00);
+    vec3 iceWhite = vec3(1.00, 0.98, 1.00);
+    vec3 deepBlue = vec3(0.55, 0.35, 0.92);
     vec3 gradient = mix(topBlue, iceWhite, clamp(texCoord0.y * 0.75 + 0.2, 0.0, 1.0));
-    gradient = mix(gradient, vec3(1.0), smoothstep(0.92, 1.0, sweep) * 0.18);
+    gradient = mix(gradient, vec3(1.00, 0.62, 0.80), smoothstep(0.92, 1.0, sweep) * 0.22);
 
     vec3 logoRgb = texel.rgb * gradient;
     vec3 glowRgb = deepBlue * glow * 0.85;
