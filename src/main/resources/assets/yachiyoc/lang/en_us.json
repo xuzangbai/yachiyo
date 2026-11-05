@@ -66,7 +66,7 @@
   "setting.yachiyoc.client.bind": "Keybind",
   "setting.yachiyoc.client.trigger": "Trigger",
   "setting.yachiyoc.client.trigger.value.toggle": "Toggle",
-  "setting.yachiyoc.client.trigger.value.hold": "Hold",
+  "setting.yachiyoc.client.trigger.value.hold": "Hold Enable",
   "setting.yachiyoc.example.announce": "Chat Feedback",
   "setting.yachiyoc.example.range": "Range",
   "setting.yachiyoc.example.mode": "Mode",
@@ -194,5 +194,6 @@
   "setting.yachiyoc.aura.targets.description": "Try not to add entities that cannot be attacked, such as arrows (attacking them may get you kicked, but I'm too lazy to fix it :))",
   "selector.yachiyoc.category.vehicles": "Vehicles",
   "setting.yachiyoc.aura.rotation.value.silent_movement": "Silent Movement",
-  "setting.yachiyoc.client.config.rotation_mode.value.silent_movement": "Silent Movement"
+  "setting.yachiyoc.client.config.rotation_mode.value.silent_movement": "Silent Movement",
+  "setting.yachiyoc.client.trigger.value.hold_toggle": "Hold Toggle"
 }

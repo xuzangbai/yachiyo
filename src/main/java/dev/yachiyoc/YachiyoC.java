@@ -38,6 +38,7 @@ public final class YachiyoC implements ClientModInitializer {
     private static final Logger LOGGER = LoggerFactory.getLogger(MOD_ID);
 
     private static final Map<String, Boolean> KEY_STATE = new HashMap<>();
+    private static final Map<String, Boolean> HOLD_BASELINE = new HashMap<>();
 
     private static ConfigManager config;
     private static ModuleRegistry modules;
@@ -117,17 +118,36 @@ public final class YachiyoC implements ClientModInitializer {
             if (down && !wasDown) {
                 if (module.trigger.get() == TriggerMode.HOLD) {
                     setFromKey(module, true);
+                } else if (module.trigger.get() == TriggerMode.HOLD_TOGGLE) {
+                    boolean baseline = module.enabled();
+                    HOLD_BASELINE.put(module.id(), baseline);
+                    setFromKey(module, !baseline);
                 } else {
                     setFromKey(module, !module.enabled());
                 }
-            } else if (!down && wasDown && module.trigger.get() == TriggerMode.HOLD) {
-                setFromKey(module, false);
+            } else if (!down && wasDown) {
+                if (module.trigger.get() == TriggerMode.HOLD) {
+                    setFromKey(module, false);
+                } else if (module.trigger.get() == TriggerMode.HOLD_TOGGLE) {
+                    Boolean baseline = HOLD_BASELINE.remove(module.id());
+                    if (baseline != null) {
+                        setFromKey(module, baseline);
+                    }
+                }
             }
             KEY_STATE.put(module.id(), down);
         }
     }
 
+    public static void toggleModuleFromGui(Module module) {
+        setModuleEnabled(module, !module.enabled());
+    }
+
     private static void setFromKey(Module module, boolean enabled) {
+        setModuleEnabled(module, enabled);
+    }
+
+    private static void setModuleEnabled(Module module, boolean enabled) {
         boolean before = module.enabled();
         module.setEnabled(enabled);
         if (before != module.enabled() && module.toggleFeedback()) {
@@ -149,6 +169,11 @@ public final class YachiyoC implements ClientModInitializer {
             if (KEY_STATE.getOrDefault(module.id(), false)) {
                 if (module.trigger.get() == TriggerMode.HOLD) {
                     module.setEnabled(false);
+                } else if (module.trigger.get() == TriggerMode.HOLD_TOGGLE) {
+                    Boolean baseline = HOLD_BASELINE.remove(module.id());
+                    if (baseline != null) {
+                        module.setEnabled(baseline);
+                    }
                 }
                 KEY_STATE.put(module.id(), false);
             }

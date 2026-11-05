@@ -1,5 +1,7 @@
 package dev.yachiyoc.ui.widget;
 
+import dev.yachiyoc.YachiyoC;
+import dev.yachiyoc.YachiyoC;
 import dev.yachiyoc.module.Module;
 import dev.yachiyoc.ui.Theme;
 import dev.yachiyoc.ui.anim.Anim;
@@ -105,7 +107,7 @@ public final class ModuleCard {
             return false;
         }
         if (click.button() == 0) {
-            module.toggle();
+            YachiyoC.toggleModuleFromGui(module);
             toggleAnim.set(module.enabled() ? 1.0F : 0.0F);
             return true;
         }

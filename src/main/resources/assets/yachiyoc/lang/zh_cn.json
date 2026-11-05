@@ -66,7 +66,7 @@
   "setting.yachiyoc.client.bind": "按键绑定",
   "setting.yachiyoc.client.trigger": "触发方式",
   "setting.yachiyoc.client.trigger.value.toggle": "切换",
-  "setting.yachiyoc.client.trigger.value.hold": "按住",
+  "setting.yachiyoc.client.trigger.value.hold": "按住开启",
   "setting.yachiyoc.example.announce": "聊天反馈",
   "setting.yachiyoc.example.range": "范围",
   "setting.yachiyoc.example.mode": "模式",
@@ -194,5 +194,6 @@
   "setting.yachiyoc.aura.targets.description": "尽量不要添加无法被攻击的实体，比如箭之类的（攻击时会被踢，但我懒得修:)）",
   "selector.yachiyoc.category.vehicles": "载具",
   "setting.yachiyoc.aura.rotation.value.silent_movement": "静默移动",
-  "setting.yachiyoc.client.config.rotation_mode.value.silent_movement": "静默移动"
+  "setting.yachiyoc.client.config.rotation_mode.value.silent_movement": "静默移动",
+  "setting.yachiyoc.client.trigger.value.hold_toggle": "按住切换"
 }
