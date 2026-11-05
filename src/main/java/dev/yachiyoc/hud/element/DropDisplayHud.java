@@ -16,7 +16,6 @@ import net.minecraft.client.gui.DrawContext;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.EntityType;
 import net.minecraft.entity.ItemEntity;
-import net.minecraft.entity.LivingEntity;
 import net.minecraft.entity.mob.MobEntity;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.item.ItemStack;
@@ -30,23 +29,37 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Lists dropped items / entities around the player, with an optional watched
+ * Lists every loaded dropped item / entity around the player, with an optional watched
  * item alert (chat + custom ogg sound). The layout is intentionally simple and
- * fully configurable: range, item/entity toggles, line limit, scale, background.
+ * fully configurable: item/entity toggles, item merging, line limit, scale, background.
  */
 public final class DropDisplayHud extends HudElement {
-    private final DoubleSetting range =
-            add(new DoubleSetting("hud.drop_display", "range", 512.0, 8.0, 512.0, 1.0, true));
     private final BoolSetting showItems =
             add(new BoolSetting("hud.drop_display", "show_items", true));
+    /** 只有“物品本身完全相同”（同物品 + 同组件/同自定义名）的掉落物才合并成一行；关掉就一实体一行。 */
+    private final BoolSetting mergeItems =
+            add(new BoolSetting("hud.drop_display", "merge_items", true));
     private final BoolSetting showEntities =
             add(new BoolSetting("hud.drop_display", "show_entities", true));
+    /**
+     * 非玩家实体的白名单，复用通用实体选择器（和 aura 的目标列表同一套 UI）。
+     * （去掉 player：玩家由“显示玩家”管）。
+     */
+    private final RegistryListSetting entityTypes =
+            add(new RegistryListSetting("hud.drop_display", "entity_types", RegistryKind.ENTITY_TARGET,
+                    List.of("minecraft:zombified_piglin",
+                            // 下界表：家畜 + 僵尸系 + 苦力怕/蜘蛛/史莱姆/村民
+                            "minecraft:cow", "minecraft:sheep", "minecraft:pig", "minecraft:horse",
+                            "minecraft:zombie", "minecraft:husk", "minecraft:drowned",
+                            "minecraft:zombie_villager", "minecraft:creeper",
+                            "minecraft:spider", "minecraft:cave_spider", "minecraft:slime",
+                            "minecraft:villager", "minecraft:bogged")));
     private final BoolSetting showPlayers =
             add(new BoolSetting("hud.drop_display", "show_players", true));
     private final BoolSetting pinPlayers =
             add(new BoolSetting("hud.drop_display", "pin_players", true));
     private final DoubleSetting maxLines =
-            add(new DoubleSetting("hud.drop_display", "max_lines", 20.0, 1.0, 20.0, 1.0));
+            add(new DoubleSetting("hud.drop_display", "max_lines", 20.0, 1.0, 64.0, 1.0));
     private final BoolSetting background =
             add(new BoolSetting("hud.drop_display", "background", false));
     private final ColorSetting backgroundColor =
@@ -65,12 +78,13 @@ public final class DropDisplayHud extends HudElement {
 
     private final List<Entry> entries = new ArrayList<>();
     private final Map<String, Long> lastNotify = new HashMap<>();
-    private long lastRangeCheck;
-    private double cachedLoadedRange = 256.0;
 
     public DropDisplayHud() {
         super("drop_display");
         pinPlayers.visibleWhen(showPlayers::get);
+        mergeItems.visibleWhen(showItems::get);
+        entityTypes.visibleWhen(showEntities::get);
+        entityTypes.description(() -> Text.translatable("setting.yachiyoc.hud.drop_display.entity_types.description"));
         backgroundColor.visibleWhen(background::get);
     }
 
@@ -84,47 +98,50 @@ public final class DropDisplayHud extends HudElement {
             return;
         }
 
-        if (client.options != null) {
-            range.setMax(loadedRange(client));
-        }
-        double maxDistance = range.get();
+        // 全量列出已加载范围内的一切实体：不做距离过滤，由 max_lines 决定最终显示多少行。
+        // 距离统一用三维距离（既然取消了半径过滤，高度轴就不再需要单独忽略）。
+        // 掉落物：开了“物品合并”时，只有物品本身完全相同（同物品 + 同组件）的堆才合并成一行
+        // （数量累加、距离取最近）；关掉则一个掉落物实体一行。生物 / 实体 / 玩家不受这个开关影响。
+        // 非玩家实体还要过一遍“实体类型”白名单（同类型的判定结果每帧只算一次）。
         Map<EntityType<?>, Group> groups = new HashMap<>();
+        List<ItemGroup> itemGroups = new ArrayList<>();
+        Map<EntityType<?>, Boolean> typeAllowed = new HashMap<>();
         for (Entity entity : client.world.getEntities()) {
             if (entity == client.player || entity.isRemoved()) {
                 continue;
             }
             double distance = Math.sqrt(entity.squaredDistanceTo(client.player));
-            if (distance > maxDistance) {
-                continue;
-            }
             if (entity instanceof ItemEntity item) {
                 if (!showItems.get() || item.getStack().isEmpty()) {
                     continue;
                 }
-                String id = Registries.ITEM.getId(item.getStack().getItem()).toString();
-                entries.add(new Entry(item.getStack().getName().getString(), item.getStack(),
-                        distance, watchedItems.contains(id), item.getStack().getCount(), false, false));
+                ItemGroup group = mergeItems.get() ? findItemGroup(itemGroups, item.getStack()) : null;
+                if (group == null) {
+                    group = new ItemGroup();
+                    itemGroups.add(group);
+                }
+                group.add(item.getStack(), distance);
             } else if (entity instanceof PlayerEntity) {
                 if (showEntities.get() && showPlayers.get()) {
                     entries.add(new Entry(entity.getName().getString(), ItemStack.EMPTY,
                             distance, false, 1, true, true));
                 }
-            } else if (entity instanceof MobEntity mob) {
-                if (!showEntities.get()) {
-                    continue;
-                }
-                // Animals / monsters are merged by entity type; players stay individual.
-                groups.computeIfAbsent(mob.getType(), type -> new Group())
-                        .add(distance);
-            } else if (entity instanceof LivingEntity) {
-                if (showEntities.get()) {
+            } else if (showEntities.get() && typeAllowed.computeIfAbsent(entity.getType(),
+                    type -> entityTypes.contains(Registries.ENTITY_TYPE.getId(type).toString()))) {
+                if (entity instanceof MobEntity mob) {
+                    // Animals / monsters are merged by entity type; players stay individual.
+                    groups.computeIfAbsent(mob.getType(), type -> new Group())
+                            .add(distance);
+                } else {
                     entries.add(new Entry(entity.getName().getString(), ItemStack.EMPTY,
                             distance, false, 1, false, false));
                 }
-            } else if (showEntities.get()) {
-                entries.add(new Entry(entity.getName().getString(), ItemStack.EMPTY,
-                        distance, false, 1, false, false));
             }
+        }
+        for (ItemGroup value : itemGroups) {
+            String id = Registries.ITEM.getId(value.sample.getItem()).toString();
+            entries.add(new Entry(value.sample.getName().getString(), value.sample,
+                    value.distance, watchedItems.contains(id), value.count, false, false));
         }
         for (Map.Entry<EntityType<?>, Group> group : groups.entrySet()) {
             entries.add(new Entry(group.getKey().getName().getString(), ItemStack.EMPTY,
@@ -149,38 +166,14 @@ public final class DropDisplayHud extends HudElement {
         height = Math.max(24.0F, entries.size() * 18.0F + 8.0F) * s;
     }
 
-    /**
-     * Actual loaded chunk radius around the player, not the client render
-     * distance option. Server view distance is normally smaller, so using the
-     * loaded chunks avoids showing "256m" when only 8-10 chunks are loaded.
-     */
-    private double loadedRange(MinecraftClient client) {
-        if (client.options == null || client.world == null || client.player == null) {
-            return cachedLoadedRange;
-        }
-        long now = System.currentTimeMillis();
-        if (now - lastRangeCheck < 500L) {
-            return cachedLoadedRange;
-        }
-        lastRangeCheck = now;
-
-        int view = Math.max(2, client.options.getClampedViewDistance());
-        int chunkX = client.player.getBlockX() >> 4;
-        int chunkZ = client.player.getBlockZ() >> 4;
-        int radius = 0;
-        for (int r = 1; r <= view; r++) {
-            if (client.world.isChunkLoaded(chunkX + r, chunkZ)
-                    || client.world.isChunkLoaded(chunkX - r, chunkZ)
-                    || client.world.isChunkLoaded(chunkX, chunkZ + r)
-                    || client.world.isChunkLoaded(chunkX, chunkZ - r)) {
-                radius = r;
+    /** 找出“物品本身完全相同”的已有分组；没有则返回 null（调用方新建一个）。 */
+    private static ItemGroup findItemGroup(List<ItemGroup> groups, ItemStack stack) {
+        for (ItemGroup group : groups) {
+            if (!group.sample.isEmpty() && ItemStack.areItemsAndComponentsEqual(group.sample, stack)) {
+                return group;
             }
         }
-        if (radius == 0) {
-            radius = view;
-        }
-        cachedLoadedRange = Math.max(32.0, radius * 16.0);
-        return cachedLoadedRange;
+        return null;
     }
 
     private void notifyWatched() {
@@ -264,6 +257,21 @@ public final class DropDisplayHud extends HudElement {
         private void add(double entityDistance) {
             count++;
             distance = Math.min(distance, entityDistance);
+        }
+    }
+
+    /** 同类掉落物合并：数量累加、距离取最近，代表栈取最近那一堆（保留自定义名字）。 */
+    private static final class ItemGroup {
+        private ItemStack sample = ItemStack.EMPTY;
+        private int count;
+        private double distance = Double.MAX_VALUE;
+
+        private void add(ItemStack stack, double entityDistance) {
+            count += stack.getCount();
+            if (entityDistance < distance) {
+                distance = entityDistance;
+                sample = stack;
+            }
         }
     }
 

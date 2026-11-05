@@ -63,8 +63,10 @@ public final class Aura extends Module {
     }
 
     private void tick(MinecraftClient client) {
+        // 注意：这里刻意不检查 currentScreen —— 开着背包/箱子/聊天/ClickGUI 时也要继续打。
+        // 只在世界被暂停（单机暂停菜单、/tick freeze）时停手，否则请求会一直堆在集成服务端那边。
         if (!enabled() || client.player == null || client.world == null
-                || client.currentScreen != null || client.interactionManager == null) {
+                || client.interactionManager == null || !client.world.getTickManager().shouldTick()) {
             return;
         }
         ClientPlayerEntity player = client.player;

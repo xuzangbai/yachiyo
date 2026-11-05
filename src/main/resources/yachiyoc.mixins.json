@@ -6,9 +6,14 @@
     "ClientPlayerEntityAccessor",
     "ChatScreenMixin",
     "ClientCommonNetworkHandlerMixin",
+    "ClientConnectionMixin",
     "ClientPlayerEntityMixin",
     "ChatHudMixin",
+    "DecoderHandlerMixin",
     "FontManagerMixin",
+    "ItemMixin",
+    "ItemModelManagerMixin",
+    "LancingMixin",
     "MinecraftClientMixin"
   ],
   "injectors": {

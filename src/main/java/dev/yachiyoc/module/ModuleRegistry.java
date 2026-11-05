@@ -6,6 +6,7 @@ import dev.yachiyoc.module.impl.client.Colors;
 import dev.yachiyoc.module.impl.client.Config;
 import dev.yachiyoc.module.impl.combat.Aura;
 import dev.yachiyoc.module.impl.misc.Example;
+import dev.yachiyoc.module.impl.misc.ViaFix;
 import dev.yachiyoc.module.setting.Setting;
 
 import java.util.ArrayList;
@@ -32,6 +33,7 @@ public final class ModuleRegistry {
         register(new Config());
         register(new Colors());
         register(new Example());
+        register(new ViaFix());
     }
 
     public void register(Module module) {
