@@ -40,11 +40,7 @@ import net.minecraft.util.Hand;
  * </ul>
  */
 public final class AttackScheduler {
-    /** 还没有记录过出手时的 tick 占位值。 */
-    private static final long UNKNOWN_TICK = Long.MIN_VALUE / 2;
-
     private static long lastAttackMs;
-    private static long lastAttackTick = UNKNOWN_TICK;
 
     private AttackScheduler() {
     }
@@ -84,18 +80,16 @@ public final class AttackScheduler {
             return System.currentTimeMillis() - lastAttackMs >= (long) delayMs;
         }
         double speed = attackSpeedOf(player, weapon);
-        if (speed <= 0.0) {
+        if (!Double.isFinite(speed) || speed <= 0.0D) {
             return player.getAttackCooldownProgress(0.5F) >= 0.9F;
         }
-        double elapsed = elapsedTicks(player) + 0.5D;
-        float heldPerTick = player.getAttackCooldownProgressPerTick();
-        float heldProgress = player.getAttackCooldownProgress(0.5F);
-        if (heldProgress < 1.0F) {
-            // 没被 clamp 时 progress * perTick 就是“距上次出手的 tick 数 + 0.5”
-            elapsed = Math.min(elapsed, heldProgress * heldPerTick);
-        }
+        // 原版最慢的重锤是 0.6；比这还慢多半是自定义物品/服务端的怪属性，别让它把光环卡死
+        speed = Math.max(speed, 0.6D);
         double perTick = 20.0D / speed;
-        return elapsed / perTick >= 0.9D;
+        if (!Double.isFinite(perTick) || perTick <= 0.0D) {
+            return player.getAttackCooldownProgress(0.5F) >= 0.9F;
+        }
+        return elapsedTicks(player) / perTick >= 0.9D;
     }
 
     /** 这把武器拿在手上时的每秒攻击次数（{@code ATTACK_SPEED}，含物品自身的属性修正）。 */
@@ -178,15 +172,32 @@ public final class AttackScheduler {
 
     private static void markAttacked(ClientPlayerEntity player) {
         lastAttackMs = System.currentTimeMillis();
-        lastAttackTick = player.getEntityWorld() == null ? UNKNOWN_TICK : player.getEntityWorld().getTime();
     }
 
-    /** 距离本模块上一次出手过了几个 tick（没有记录时给一个很大的数）。 */
+    /**
+     * 距离上一次出手过了几个 tick。
+     *
+     * <p>原版进度没被 clamp 时，{@code progress * perTick} 就是“距上次出手的 tick 数 + 0.5”，
+     * 直接用它（这是服务端那份数据的镜像，最准）；被 clamp 到 1 之后原版不再给更多信息，
+     * 就用墙钟（每 tick 50ms）补。
+     *
+     * <p>两边都是单调递增的量，所以这个判定**不会卡死** —— 之前用 {@code player.age} 自己记，
+     * 结果客户端那个计数没有跟着走，打出一刀以后永远判定“冷却没好”。
+     */
     private static double elapsedTicks(ClientPlayerEntity player) {
-        if (lastAttackTick == UNKNOWN_TICK || player.getEntityWorld() == null) {
-            return Double.MAX_VALUE / 4.0D;
+        double wall = lastAttackMs <= 0L
+                ? Double.MAX_VALUE / 4.0D
+                : Math.max(0D, (System.currentTimeMillis() - lastAttackMs) / 50.0D);
+        float progress = player.getAttackCooldownProgress(0.5F);
+        if (progress > 0.0F && progress < 1.0F) {
+            return Math.min(progress * player.getAttackCooldownProgressPerTick(), wall);
         }
-        return Math.max(0L, player.getEntityWorld().getTime() - lastAttackTick);
+        return wall;
+    }
+
+    /** 距上次出手多少毫秒（给日志用）。 */
+    public static long millisSinceLastAttack() {
+        return lastAttackMs <= 0L ? -1L : System.currentTimeMillis() - lastAttackMs;
     }
 
     private static void sendSelectedSlot(ClientPlayerEntity player, int slot) {

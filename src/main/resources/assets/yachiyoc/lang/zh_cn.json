@@ -155,6 +155,11 @@
   "command.yachiyoc.language.desc": "切换界面语言",
   "command.yachiyoc.modules.desc": "列出已注册模块",
   "command.yachiyoc.config.desc": "保存或重载配置",
+  "command.yachiyoc.debug.desc": "调试输出开关（按功能，默认全关）",
+  "command.yachiyoc.debug.usage": "用法：%sdebug [功能] [on|off]",
+  "command.yachiyoc.debug.set": "调试 %s：%s",
+  "command.yachiyoc.debug.none": "调试输出：全关",
+  "command.yachiyoc.debug.list": "已开启的调试：%s",
   "command.yachiyoc.help.header": "客户端指令（前缀 %s）：",
   "command.yachiyoc.help.entry": "%s%s —— %s",
   "command.yachiyoc.unknown": "未知指令 '%s'。试试 %shelp。",
@@ -228,6 +233,8 @@
   "setting.yachiyoc.aura.swap_inventory.description": "快捷栏没有目标武器时从背包（9~35）换上来；静默模式下同一 tick 换手→出手→换回，不会把刀显示在手上。",
   "setting.yachiyoc.aura.weapon_cooldown": "按武器冷却",
   "setting.yachiyoc.aura.weapon_cooldown.description": "按真正出手的那把武器的攻速算冷却，而不是手上拿着的东西；攻击延迟 > 0 时无效。",
+  "setting.yachiyoc.aura.pause_eating": "进食时暂停",
+  "setting.yachiyoc.aura.pause_eating.description": "吃东西 / 喝药 / 举盾时不打，并把手上的武器换回去。",
   "setting.yachiyoc.client.config.rotation_mode.value.silent_movement": "静默移动",
   "setting.yachiyoc.client.trigger.value.hold_toggle": "按住切换"
 }

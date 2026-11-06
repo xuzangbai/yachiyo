@@ -4,6 +4,7 @@ import dev.yachiyoc.YachiyoC;
 import dev.yachiyoc.module.Module;
 import dev.yachiyoc.module.ModuleCategory;
 import dev.yachiyoc.module.ModuleRegistry;
+import dev.yachiyoc.platform.Debug;
 import dev.yachiyoc.platform.Keybinds;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.text.Text;
@@ -11,9 +12,11 @@ import org.lwjgl.glfw.GLFW;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Client-side command dispatcher. Any chat message starting with the configured
@@ -134,10 +137,47 @@ public final class CommandManager {
                 }
                 case "reload" -> {
                     YachiyoC.reloadAll();
+                    Debug.setAll(YachiyoC.config().data().debugFeatures);
                     ctx.reply(Text.translatable("command.yachiyoc.config.reloaded"));
                 }
                 default -> ctx.error(Text.translatable("command.yachiyoc.config.usage", YachiyoC.prefix()));
             }
+        }));
+
+        register(new SimpleCommand("debug", List.of(), "debug [feature] [on|off]",
+                "command.yachiyoc.debug.desc", ctx -> {
+            String feature = ctx.arg(0).toLowerCase(Locale.ROOT);
+            if (feature.isEmpty()) {
+                // 只输入 --debug：列出当前开着哪些
+                Set<String> enabled = Debug.enabledFeatures();
+                if (enabled.isEmpty()) {
+                    ctx.reply(Text.translatable("command.yachiyoc.debug.none"));
+                } else {
+                    ctx.reply(Text.translatable("command.yachiyoc.debug.list",
+                            String.join(", ", enabled)));
+                }
+                return;
+            }
+            String value = ctx.arg(1).toLowerCase(Locale.ROOT);
+            boolean on;
+            if (value.isEmpty()) {
+                // all 没给值时：有开着的就全关，全关着就全开
+                on = feature.equals(Debug.ALL)
+                        ? Debug.enabledFeatures().isEmpty()
+                        : !Debug.enabled(feature);
+            } else if (value.equals("on") || value.equals("true") || value.equals("1")) {
+                on = true;
+            } else if (value.equals("off") || value.equals("false") || value.equals("0")) {
+                on = false;
+            } else {
+                ctx.error(Text.translatable("command.yachiyoc.debug.usage", YachiyoC.prefix()));
+                return;
+            }
+            Debug.set(feature, on);
+            YachiyoC.config().data().debugFeatures = new LinkedHashSet<>(Debug.enabledFeatures());
+            YachiyoC.config().save();
+            ctx.reply(Text.translatable("command.yachiyoc.debug.set", feature,
+                    Text.translatable(on ? "command.yachiyoc.state.on" : "command.yachiyoc.state.off")));
         }));
     }
 
@@ -163,15 +203,20 @@ public final class CommandManager {
      * method can be extended with their argument suggestions.
      */
     public List<String> suggestionsFor(String commandName, int argIndex) {
+        String name = commandName.toLowerCase(Locale.ROOT);
+        if (argIndex == 1) {
+            return name.equals("debug") ? List.of("on", "off") : List.of();
+        }
         if (argIndex != 0) {
             return List.of();
         }
-        return switch (commandName.toLowerCase(Locale.ROOT)) {
+        return switch (name) {
             case "help" -> commandNames();
             case "openkey" -> List.of("up", "down", "left", "right",
                     "rshift", "lshift", "rctrl", "lctrl", "enter", "tab", "space");
             case "language" -> List.of("auto", "en_us", "zh_cn");
             case "config" -> List.of("save", "reload");
+            case "debug" -> List.copyOf(Debug.knownFeatures());
             default -> List.of();
         };
     }

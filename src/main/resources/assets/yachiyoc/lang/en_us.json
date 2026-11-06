@@ -155,6 +155,11 @@
   "command.yachiyoc.language.desc": "Switch the UI language",
   "command.yachiyoc.modules.desc": "List registered modules",
   "command.yachiyoc.config.desc": "Save or reload config",
+  "command.yachiyoc.debug.desc": "Per-feature debug logging (all off by default)",
+  "command.yachiyoc.debug.usage": "Usage: %sdebug [feature] [on|off]",
+  "command.yachiyoc.debug.set": "Debug %s: %s",
+  "command.yachiyoc.debug.none": "Debug logging: all off",
+  "command.yachiyoc.debug.list": "Debug enabled: %s",
   "command.yachiyoc.help.header": "Commands (prefix %s):",
   "command.yachiyoc.help.entry": "%s%s — %s",
   "command.yachiyoc.unknown": "Unknown command '%s'. Try %shelp.",
@@ -228,6 +233,8 @@
   "setting.yachiyoc.aura.swap_inventory.description": "Swap the weapon in from the inventory (9~35) when the hotbar has none; Silent swaps in, hits and swaps back within one tick, never showing the weapon in your hand.",
   "setting.yachiyoc.aura.weapon_cooldown": "Weapon Cooldown",
   "setting.yachiyoc.aura.weapon_cooldown.description": "Use the attack speed of the weapon that actually hits, not the held item. Ignored when Attack Delay is above 0.",
+  "setting.yachiyoc.aura.pause_eating": "Pause When Eating",
+  "setting.yachiyoc.aura.pause_eating.description": "Stop attacking while eating, drinking or blocking; swapped weapons go back.",
   "setting.yachiyoc.client.config.rotation_mode.value.silent_movement": "Silent Movement",
   "setting.yachiyoc.client.trigger.value.hold_toggle": "Hold Toggle"
 }

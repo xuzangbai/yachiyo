@@ -72,6 +72,7 @@ public final class YachiyoC implements ClientModInitializer {
         long start = System.currentTimeMillis();
         config = new ConfigManager();
         config.load();
+        dev.yachiyoc.platform.Debug.setAll(config.data().debugFeatures);
 
         modules = new ModuleRegistry();
         modules.bootstrap();

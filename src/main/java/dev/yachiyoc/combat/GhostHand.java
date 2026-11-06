@@ -2,6 +2,7 @@ package dev.yachiyoc.combat;
 
 import dev.yachiyoc.mixin.ClientPlayerEntityAccessor;
 import dev.yachiyoc.net.PostManager;
+import dev.yachiyoc.platform.Debug;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.network.ClientPlayerEntity;
@@ -14,8 +15,6 @@ import net.minecraft.network.packet.c2s.play.PlayerInputC2SPacket;
 import net.minecraft.network.packet.c2s.play.UpdateSelectedSlotC2SPacket;
 import net.minecraft.screen.slot.SlotActionType;
 import net.minecraft.util.PlayerInput;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.util.OptionalInt;
 
@@ -58,7 +57,6 @@ import java.util.OptionalInt;
  * 刀还留在手上（服务端按 revision 丢了那次点击）就隔几个 tick 补一次，最多几次后放弃。
  */
 public final class GhostHand {
-    private static final Logger LOGGER = LoggerFactory.getLogger("yachiyoc");
 
     /** 换回点击最多补几次（服务端按 revision 丢包时自愈）。 */
     private static final int RESTORE_MAX_ATTEMPTS = 8;
@@ -207,7 +205,7 @@ public final class GhostHand {
                 inventory.getStack(index).copy());
         silent = state;
         clickSwap(player, syncId, slot, selected);
-        LOGGER.debug("ghost hand: swap in slot {} -> hotbar {} (syncId {})", index, selected, syncId);
+        Debug.log("ghosthand", "swap in slot %s -> hotbar %s (syncId %s)", index, selected, syncId);
         return () -> restoreSilent(player, state);
     }
 
@@ -245,8 +243,7 @@ public final class GhostHand {
         }
         if (!rebind(player, state)) {
             // 换了容器而且对不上格子：不再点，物品留在手上也不乱点
-            LOGGER.info("ghost hand: container changed, drop silent state (slot {})",
-                    state.sourceIndex);
+            Debug.log("ghosthand", "container changed, drop silent state (slot %s)", state.sourceIndex);
             silent = null;
             return;
         }
@@ -258,14 +255,12 @@ public final class GhostHand {
             }
             state.ticks = 0;
             if (state.attempts >= RESTORE_MAX_ATTEMPTS) {
-                LOGGER.warn("ghost hand: give up restoring slot {} (still in hand)",
-                        state.sourceIndex);
+                Debug.log("ghosthand", "give up restoring slot %s (still in hand)", state.sourceIndex);
                 silent = null;
                 return;
             }
             state.attempts++;
-            LOGGER.info("ghost hand: restore click dropped (slot {}), retry {}",
-                    state.sourceIndex, state.attempts);
+            Debug.log("ghosthand", "restore click dropped (slot %s), retry %s", state.sourceIndex, state.attempts);
             clickSwap(player, state.syncId, state.handlerSlot, state.hotbarButton);
             return;
         }

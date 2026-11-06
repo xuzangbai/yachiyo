@@ -3,7 +3,9 @@ package dev.yachiyoc.config;
 import com.google.gson.JsonElement;
 
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Plain data model persisted as {@code config/yachiyoc.json}.
@@ -14,6 +16,8 @@ public final class ConfigData {
     public int openKey = 265; // GLFW_KEY_UP
     /** auto | en_us | zh_cn */
     public String language = "zh_cn";
+    /** --debug 开着的功能名，默认空（全关）。 */
+    public Set<String> debugFeatures = new LinkedHashSet<>();
 
     public Map<String, Boolean> moduleStates = new LinkedHashMap<>();
     public Map<String, Map<String, JsonElement>> moduleSettings = new LinkedHashMap<>();

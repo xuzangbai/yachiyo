@@ -11,6 +11,7 @@ import dev.yachiyoc.module.setting.BoolSetting;
 import dev.yachiyoc.module.setting.DoubleSetting;
 import dev.yachiyoc.module.setting.EnumSetting;
 import dev.yachiyoc.module.setting.RegistryListSetting;
+import dev.yachiyoc.platform.Debug;
 import dev.yachiyoc.platform.RegistryKind;
 import dev.yachiyoc.rotation.RotationChoice;
 import dev.yachiyoc.rotation.RotationManager;
@@ -18,6 +19,7 @@ import dev.yachiyoc.rotation.RotationMode;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.network.ClientPlayerEntity;
+import net.minecraft.component.DataComponentTypes;
 import net.minecraft.entity.Entity;
 import net.minecraft.item.ItemStack;
 import net.minecraft.util.math.Vec3d;
@@ -66,6 +68,9 @@ public final class Aura extends Module {
     /** 按“要用的那把武器”的攻速算冷却，而不是按手上拿的东西（静默切刀时手里是镐子）。 */
     private final BoolSetting weaponCooldown =
             add(new BoolSetting("aura", "weapon_cooldown", true));
+    /** 吃东西 / 喝药 / 举盾时不打，并且把手换回去。 */
+    private final BoolSetting pauseEating =
+            add(new BoolSetting("aura", "pause_eating", true));
 
     public Aura() {
         super("aura", ModuleCategory.COMBAT, true);
@@ -86,6 +91,8 @@ public final class Aura extends Module {
                 "setting.yachiyoc.aura.swap_inventory.description"));
         weaponCooldown.description(() -> net.minecraft.text.Text.translatable(
                 "setting.yachiyoc.aura.weapon_cooldown.description"));
+        pauseEating.description(() -> net.minecraft.text.Text.translatable(
+                "setting.yachiyoc.aura.pause_eating.description"));
         weaponType.visibleWhen(autoSwap::get);
         switchMode.visibleWhen(autoSwap::get);
         swapInventory.visibleWhen(autoSwap::get);
@@ -119,6 +126,14 @@ public final class Aura extends Module {
     private void aimAndAttack(MinecraftClient client, ClientPlayerEntity player) {
         boolean swap = autoSwap.get();
         WeaponSwitchMode mode = switchMode.get();
+        if (pauseEating.get() && isConsuming(player)) {
+            // 吃 / 喝（只认消耗品）：整个光环停手 —— 不锁定目标、不转头、不出手，
+            // 也不动玩家的手（这里刻意不 release：快捷栏换手的收尾会把选中格拨回去，
+            // 那样会把正在吃的食物换掉，等于打断进食）。
+            RotationManager.clearAim();
+            logGate("paused (eating)");
+            return;
+        }
         Entity target = TargetSelector.findBest(client, player,
                 new TargetSelector.Filter(range.get(), Set.copyOf(targets.selected()),
                         throughWalls.get(), false));
@@ -169,11 +184,35 @@ public final class Aura extends Module {
      * <p>`攻击延迟` 大于 0 时永远走固定间隔，这个开关不起作用（UI 里也会隐藏）。
      */
     private boolean cooldownReady(ClientPlayerEntity player, double delay) {
-        if (!weaponCooldown.get() || !autoSwap.get() || delay > 0.0) {
-            return AttackScheduler.canAttack(player, delay);
+        boolean weaponMode = weaponCooldown.get() && autoSwap.get() && delay <= 0.0;
+        ItemStack weapon = weaponMode
+                ? GhostHand.findWeaponStack(player, weaponType.get(), swapInventory.get())
+                : ItemStack.EMPTY;
+        boolean ready = weaponMode
+                ? AttackScheduler.canAttack(player, delay, weapon)
+                : AttackScheduler.canAttack(player, delay);
+        if (!ready) {
+            logGate("wait — weapon=%s speed=%s progress=%s using=%s delay=%s sinceLastHit=%sms age=%s",
+                    weapon.isEmpty() ? "<none>" : weapon.getItem(),
+                    weapon.isEmpty() ? 0.0D : AttackScheduler.attackSpeedOf(player, weapon),
+                    player.getAttackCooldownProgress(0.5F),
+                    player.isUsingItem(), delay,
+                    AttackScheduler.millisSinceLastAttack(), player.age);
         }
-        ItemStack weapon = GhostHand.findWeaponStack(player, weaponType.get(), swapInventory.get());
-        return AttackScheduler.canAttack(player, delay, weapon);
+        return ready;
+    }
+
+    /**
+     * 为什么这一 tick 没出手（2 秒一条，只在 {@code --debug} 打开时写）。
+     * 排查“光环不开刀”时先看这里。
+     */
+    private void logGate(String format, Object... args) {
+        Debug.logThrottled("aura", 2000L, format, args);
+    }
+
+    /** 正在吃 / 喝：只认消耗品，举盾、拉弓、长矛蓄力不算。 */
+    private static boolean isConsuming(ClientPlayerEntity player) {
+        return player.isUsingItem() && player.getActiveItem().contains(DataComponentTypes.CONSUMABLE);
     }
 
     /**
