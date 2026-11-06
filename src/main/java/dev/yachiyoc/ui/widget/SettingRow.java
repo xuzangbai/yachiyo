@@ -78,9 +78,16 @@ public final class SettingRow {
             Render2D.roundedRect(ctx, x, y, width, height(), Theme.SMALL_RADIUS - 1.0F, Theme.ROW_HOVER);
         }
 
+        // 编辑中的数值输入框：靠右、不铺满整行（最多 96px），左边照常显示设置名
+        DoubleSetting editingSlider = setting instanceof DoubleSetting ds && ds.editing() ? ds : null;
+        float editBoxW = editingSlider == null ? 0.0F : Math.min(96.0F, width - 60.0F);
+        float editBoxX = x + width - 26.0F - editBoxW;
         int labelSpace = setting instanceof StringSetting || setting instanceof SoundSetting
                 || setting instanceof RegistryListSetting ? 132 : 82;
-        Text label = Text2D.trim(setting.label(), (int) width - labelSpace);
+        int labelWidth = editingSlider == null
+                ? (int) width - labelSpace
+                : (int) Math.max(10.0F, editBoxX - x - 12.0F);
+        Text label = Text2D.trim(setting.label(), labelWidth);
         Text2D.draw(ctx, label, x + 8.0F, y + 7.0F, Theme.TEXT_DIM, false);
 
         if (setting instanceof BoolSetting bool) {
@@ -93,25 +100,32 @@ public final class SettingRow {
             Render2D.roundedRect(ctx, knobX, trackY + 2.0F, 8.0F, 8.0F, 4.0F, Theme.KNOB);
         } else if (setting instanceof DoubleSetting slider) {
             if (slider.editing()) {
-                // 数值输入框：编辑时只画输入框（不再画数值和滑条），避免互相挡住
-                float fieldX = x + width - 86.0F;
-                float fieldY = y + 4.0F;
-                Render2D.roundedBox(ctx, fieldX, fieldY, 62.0F, 16.0F, 4.0F,
-                        Render2D.withAlpha(accent, 0.85F), Theme.FIELD);
-                Text shown = Text2D.trim(Text.literal(slider.buffer()), 52);
-                Text2D.draw(ctx, shown, fieldX + 5.0F, fieldY + 4.0F, Theme.TEXT, false);
+                // 输入框只占右侧一块（宽度见 editBoxW），左边设置名照常显示，互不遮挡
+                float boxX = editBoxX;
+                float boxY = y + 5.0F;
+                float boxW = editBoxW;
+                float boxH = 13.0F;
+                Render2D.roundedBox(ctx, boxX, boxY, boxW, boxH, 3.5F,
+                        Render2D.withAlpha(accent, 0.9F), Theme.FIELD);
+                Text shown = Text2D.trim(Text.literal(slider.buffer()), (int) (boxW - 12.0F));
+                float textX = boxX + 5.0F;
+                Text2D.draw(ctx, shown, textX, boxY + 3.0F, Theme.TEXT, false);
                 if ((System.currentTimeMillis() / 500L) % 2L == 0L) {
-                    float cursorX = Math.min(fieldX + 57.0F, fieldX + 5.0F + Text2D.width(shown));
-                    Render2D.fill(ctx, cursorX, fieldY + 4.0F, 1.0F, 8.0F, accent);
+                    float cursorX = Math.min(boxX + boxW - 6.0F, textX + Text2D.width(shown));
+                    Render2D.fill(ctx, cursorX, boxY + 3.0F, 1.0F, 7.0F, accent);
                 }
             } else {
-                boolean valueHovered = isOnValue(mouseX, mouseY);
+                Text valueText = Text.literal(slider.displayValue());
+                float valueW = Text2D.width(valueText);
+                float valueRight = x + width - 26.0F;
+                boolean valueHovered = isOnValue(slider, mouseX, mouseY);
                 if (valueHovered) {
-                    Render2D.roundedRect(ctx, x + width - 86.0F, y + 4.0F, 62.0F, 16.0F, 4.0F,
-                            Render2D.withAlpha(accent, 0.18F));
+                    // 悬停提示块只包住数字本身：左右各 3px，上边 y+4.5、高 11 —— 底边停在 y+15.5，
+                    // 不会压到 y+17 的滑条（之前 y+7 高 10 正好把滑条那一截盖掉了）
+                    Render2D.roundedRect(ctx, valueRight - valueW - 3.0F, y + 4.5F,
+                            valueBlockWidth(slider), 11.0F, 3.0F, Render2D.withAlpha(accent, 0.16F));
                 }
-                Text2D.drawRight(ctx, Text.literal(slider.displayValue()),
-                        x + width - 26.0F, y + 6.0F,
+                Text2D.drawRight(ctx, valueText, valueRight, y + 6.0F,
                         valueHovered ? accent : Theme.TEXT, false);
                 float trackX = x + 8.0F;
                 float trackY = y + 17.0F;
@@ -244,7 +258,7 @@ public final class SettingRow {
                         client.getWindow().getScaledWidth(), client.getWindow().getScaledHeight());
             }
         } else if (setting instanceof DoubleSetting slider) {
-            if (isOnValue(click.x(), click.y())) {
+            if (isOnValue(slider, click.x(), click.y())) {
                 // 点数值直接进输入框
                 slider.startEditing();
             } else {
@@ -301,10 +315,17 @@ public final class SettingRow {
         slider.setFromRatio((mouseX - trackX) / trackWidth);
     }
 
-    /** 鼠标是否在“数值”那一小块上（点它进输入框）；区域和渲染出来的框保持一致，避开右侧重置按钮。 */
-    private boolean isOnValue(double mouseX, double mouseY) {
-        return mouseX >= x + width - 86.0F && mouseX <= x + width - 24.0F
-                && mouseY >= y + 2.0F && mouseY <= y + 20.0F;
+    /** 鼠标是否在数值文字上（点它进输入框）；区域按数字实际宽度算，避开右侧重置按钮。 */
+    private boolean isOnValue(DoubleSetting slider, double mouseX, double mouseY) {
+        float valueW = Text2D.width(Text.literal(slider.displayValue()));
+        float right = x + width - 26.0F;
+        return mouseX >= right - valueW - 6.0F && mouseX <= right + 6.0F
+                && mouseY >= y + 3.0F && mouseY <= y + 19.0F;
+    }
+
+    /** 数字那一块的实际宽度（左右各 3px 内边距）。 */
+    private float valueBlockWidth(DoubleSetting slider) {
+        return Text2D.width(Text.literal(slider.displayValue())) + 6.0F;
     }
 
     private boolean contains(double mouseX, double mouseY) {
