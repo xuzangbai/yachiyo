@@ -1,6 +1,7 @@
 package dev.yachiyoc.hud;
 
 import dev.yachiyoc.YachiyoC;
+import dev.yachiyoc.module.setting.DoubleSetting;
 import dev.yachiyoc.module.setting.SoundSetting;
 import dev.yachiyoc.module.setting.StringSetting;
 import dev.yachiyoc.ui.Theme;
@@ -530,6 +531,18 @@ public final class HudEditorScreen extends Screen {
 
     @Override
     public boolean keyPressed(KeyInput input) {
+        DoubleSetting editingNumber = DoubleSetting.active();
+        if (editingNumber != null) {
+            if (input.key() == GLFW.GLFW_KEY_ESCAPE) {
+                editingNumber.cancel();
+            } else if (input.key() == GLFW.GLFW_KEY_ENTER || input.key() == GLFW.GLFW_KEY_KP_ENTER) {
+                editingNumber.commit();
+                save();
+            } else if (input.key() == GLFW.GLFW_KEY_BACKSPACE) {
+                editingNumber.backspace();
+            }
+            return true;
+        }
         StringSetting editing = StringSetting.active();
         if (editing != null) {
             if (input.key() == GLFW.GLFW_KEY_ESCAPE || input.key() == GLFW.GLFW_KEY_ENTER) {
@@ -555,6 +568,11 @@ public final class HudEditorScreen extends Screen {
 
     @Override
     public boolean charTyped(CharInput input) {
+        DoubleSetting editingNumber = DoubleSetting.active();
+        if (editingNumber != null) {
+            editingNumber.typeChar((char) input.codepoint());
+            return true;
+        }
         StringSetting editing = StringSetting.active();
         if (editing != null) {
             editing.append((char) input.codepoint());
@@ -573,6 +591,7 @@ public final class HudEditorScreen extends Screen {
     public void removed() {
         SoundSetting.closeOpen();
         StringSetting.stopAllEditing();
+        DoubleSetting.stopAllEditing();
         ColorPickerPopup.close();
         save();
         super.removed();

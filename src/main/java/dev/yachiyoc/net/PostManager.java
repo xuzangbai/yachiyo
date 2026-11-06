@@ -32,6 +32,19 @@ public final class PostManager {
         }
     }
 
+    /**
+     * 把动作推到“下一个服务器事务”（ping/pong）再执行，等价 SLM 的
+     * {@code PostManager.addNextTransactionAction}。没有 ping 来时 3 tick 后兜底执行。
+     */
+    public static void queueNextTransaction(Runnable action) {
+        MinecraftClient client = MinecraftClient.getInstance();
+        var player = client.player;
+        if (player == null) {
+            return;
+        }
+        queue(action, player.getYaw(), player.getPitch());
+    }
+
     /** Called after the client answers a server CommonPing (pong sent). */
     public static void onPing() {
         flush();

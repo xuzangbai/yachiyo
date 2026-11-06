@@ -254,6 +254,11 @@ public final class RotationManager {
         pendingAction = null;
     }
 
+    /** 这一 tick 之后是否还有一次延后出手（延迟移动 / 静默移动会把攻击推到下一 tick）。 */
+    public static boolean hasPendingAttack() {
+        return pending || postAttack != null || hachimiActive;
+    }
+
     public static void clearAim() {
         if (pending && !applied && pendingMode == RotationMode.DELAY_MOVEMENT) {
             // 请求还没过 sendMovementPackets 就被取消（例如同一 tick 里模块被关掉），

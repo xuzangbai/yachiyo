@@ -4,6 +4,7 @@ import dev.yachiyoc.YachiyoC;
 import dev.yachiyoc.hud.HudEditorScreen;
 import dev.yachiyoc.module.Module;
 import dev.yachiyoc.module.ModuleCategory;
+import dev.yachiyoc.module.setting.DoubleSetting;
 import dev.yachiyoc.module.setting.SoundSetting;
 import dev.yachiyoc.module.setting.StringSetting;
 import dev.yachiyoc.platform.Keybinds;
@@ -308,6 +309,7 @@ public final class ClickGuiScreen extends Screen {
         if (moduleWindow != null) {
             moduleWindow.cancelListening();
         }
+        DoubleSetting.stopAllEditing();
         moduleWindow = new ModuleSettingsWindow(module,
                 (float) click.x() + 10.0F, (float) click.y() + 8.0F);
     }
@@ -426,6 +428,18 @@ public final class ClickGuiScreen extends Screen {
 
     @Override
     public boolean keyPressed(KeyInput input) {
+        DoubleSetting editingNumber = DoubleSetting.active();
+        if (editingNumber != null) {
+            if (input.key() == GLFW.GLFW_KEY_ESCAPE) {
+                editingNumber.cancel();
+            } else if (input.key() == GLFW.GLFW_KEY_ENTER || input.key() == GLFW.GLFW_KEY_KP_ENTER) {
+                editingNumber.commit();
+                YachiyoC.config().save();
+            } else if (input.key() == GLFW.GLFW_KEY_BACKSPACE) {
+                editingNumber.backspace();
+            }
+            return true;
+        }
         StringSetting editing = StringSetting.active();
         if (editing != null) {
             if (input.key() == GLFW.GLFW_KEY_ESCAPE || input.key() == GLFW.GLFW_KEY_ENTER) {
@@ -455,6 +469,11 @@ public final class ClickGuiScreen extends Screen {
 
     @Override
     public boolean charTyped(CharInput input) {
+        DoubleSetting editingNumber = DoubleSetting.active();
+        if (editingNumber != null) {
+            editingNumber.typeChar((char) input.codepoint());
+            return true;
+        }
         StringSetting editing = StringSetting.active();
         if (editing != null) {
             editing.append((char) input.codepoint());
@@ -472,6 +491,7 @@ public final class ClickGuiScreen extends Screen {
     public void removed() {
         SoundSetting.closeOpen();
         StringSetting.stopAllEditing();
+        DoubleSetting.stopAllEditing();
         if (moduleWindow != null) {
             moduleWindow.cancelListening();
         }

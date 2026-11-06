@@ -92,16 +92,36 @@ public final class SettingRow {
             float knobX = trackX + 2.0F + t * 12.0F;
             Render2D.roundedRect(ctx, knobX, trackY + 2.0F, 8.0F, 8.0F, 4.0F, Theme.KNOB);
         } else if (setting instanceof DoubleSetting slider) {
-            Text2D.drawRight(ctx, Text.literal(slider.displayValue()),
-                    x + width - 26.0F, y + 6.0F, Theme.TEXT, false);
-            float trackX = x + 8.0F;
-            float trackY = y + 17.0F;
-            float trackWidth = width - 36.0F;
-            Render2D.roundedRect(ctx, trackX, trackY, trackWidth, 3.0F, 1.5F, Theme.TRACK_OFF);
-            float filled = trackWidth * (float) slider.ratio();
-            if (filled > 0.0F) {
-                Render2D.roundedRect(ctx, trackX, trackY, filled, 3.0F, 1.5F, accent);
-                Render2D.roundedRect(ctx, trackX + filled - 2.5F, trackY - 2.0F, 5.0F, 7.0F, 2.5F, Theme.KNOB);
+            if (slider.editing()) {
+                // 数值输入框：编辑时只画输入框（不再画数值和滑条），避免互相挡住
+                float fieldX = x + width - 86.0F;
+                float fieldY = y + 4.0F;
+                Render2D.roundedBox(ctx, fieldX, fieldY, 62.0F, 16.0F, 4.0F,
+                        Render2D.withAlpha(accent, 0.85F), Theme.FIELD);
+                Text shown = Text2D.trim(Text.literal(slider.buffer()), 52);
+                Text2D.draw(ctx, shown, fieldX + 5.0F, fieldY + 4.0F, Theme.TEXT, false);
+                if ((System.currentTimeMillis() / 500L) % 2L == 0L) {
+                    float cursorX = Math.min(fieldX + 57.0F, fieldX + 5.0F + Text2D.width(shown));
+                    Render2D.fill(ctx, cursorX, fieldY + 4.0F, 1.0F, 8.0F, accent);
+                }
+            } else {
+                boolean valueHovered = isOnValue(mouseX, mouseY);
+                if (valueHovered) {
+                    Render2D.roundedRect(ctx, x + width - 86.0F, y + 4.0F, 62.0F, 16.0F, 4.0F,
+                            Render2D.withAlpha(accent, 0.18F));
+                }
+                Text2D.drawRight(ctx, Text.literal(slider.displayValue()),
+                        x + width - 26.0F, y + 6.0F,
+                        valueHovered ? accent : Theme.TEXT, false);
+                float trackX = x + 8.0F;
+                float trackY = y + 17.0F;
+                float trackWidth = width - 36.0F;
+                Render2D.roundedRect(ctx, trackX, trackY, trackWidth, 3.0F, 1.5F, Theme.TRACK_OFF);
+                float filled = trackWidth * (float) slider.ratio();
+                if (filled > 0.0F) {
+                    Render2D.roundedRect(ctx, trackX, trackY, filled, 3.0F, 1.5F, accent);
+                    Render2D.roundedRect(ctx, trackX + filled - 2.5F, trackY - 2.0F, 5.0F, 7.0F, 2.5F, Theme.KNOB);
+                }
             }
         } else if (setting instanceof FontSetting fontSetting) {
             float pillX = x + width - 88.0F;
@@ -199,6 +219,12 @@ public final class SettingRow {
                 return true;
             }
         }
+        // 点别的设置就把正在编辑的数值输入框收掉（提交）
+        DoubleSetting activeNumber = DoubleSetting.active();
+        if (activeNumber != null && activeNumber != setting) {
+            activeNumber.commit();
+            YachiyoC.config().save();
+        }
         if (setting instanceof BoolSetting bool) {
             bool.toggle();
             boolAnim.set(bool.get() ? 1.0F : 0.0F);
@@ -218,8 +244,14 @@ public final class SettingRow {
                         client.getWindow().getScaledWidth(), client.getWindow().getScaledHeight());
             }
         } else if (setting instanceof DoubleSetting slider) {
-            dragging = true;
-            updateSlider(slider, click.x());
+            if (isOnValue(click.x(), click.y())) {
+                // 点数值直接进输入框
+                slider.startEditing();
+            } else {
+                DoubleSetting.stopAllEditing();
+                dragging = true;
+                updateSlider(slider, click.x());
+            }
         } else if (setting instanceof RegistryListSetting list) {
             MinecraftClient client = MinecraftClient.getInstance();
             client.setScreen(new RegistrySelectionScreen(list, client.currentScreen));
@@ -267,6 +299,12 @@ public final class SettingRow {
         float trackX = x + 8.0F;
         float trackWidth = width - 36.0F;
         slider.setFromRatio((mouseX - trackX) / trackWidth);
+    }
+
+    /** 鼠标是否在“数值”那一小块上（点它进输入框）；区域和渲染出来的框保持一致，避开右侧重置按钮。 */
+    private boolean isOnValue(double mouseX, double mouseY) {
+        return mouseX >= x + width - 86.0F && mouseX <= x + width - 24.0F
+                && mouseY >= y + 2.0F && mouseY <= y + 20.0F;
     }
 
     private boolean contains(double mouseX, double mouseY) {

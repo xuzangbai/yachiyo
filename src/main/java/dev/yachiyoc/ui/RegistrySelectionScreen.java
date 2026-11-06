@@ -19,7 +19,7 @@ import java.util.List;
 import java.util.Locale;
 
 /**
- * Meteor-style registry selector: available entries on the left, selected on
+ * available entries on the left, selected on
  * the right, search on top. Items, blocks and entity types all use this screen.
  */
 public final class RegistrySelectionScreen extends Screen {
