@@ -13,6 +13,9 @@ import net.minecraft.text.Text;
  */
 public final class EnumDropdownPopup {
     private static final float ROW_HEIGHT = 18.0F;
+    private static final dev.yachiyoc.ui.anim.Anim openAnim =
+            new dev.yachiyoc.ui.anim.Anim(1.0F, 150L, dev.yachiyoc.ui.anim.Easing.OUT_BACK);
+    private static boolean closing;
     private static EnumSetting<?> setting;
     private static float x;
     private static float y;
@@ -32,22 +35,45 @@ public final class EnumDropdownPopup {
             return;
         }
         setting = value;
+        closing = false;
         EnumDropdownPopup.width = width;
         x = clamp(anchorX, 6.0F, screenWidth - width - 6.0F);
         float height = height();
         y = clamp(anchorY, 6.0F, screenHeight - height - 6.0F);
+        openAnim.snap(0.0F);
+        openAnim.set(1.0F);
     }
 
+    /** 关闭时先播收拢动画，播完在 {@link #render} 里置空。 */
     public static void close() {
-        setting = null;
+        if (setting == null || closing) {
+            return;
+        }
+        closing = true;
+        openAnim.set(0.0F, 130L, dev.yachiyoc.ui.anim.Easing.OUT_QUART);
+    }
+
+    public static boolean closing() {
+        return closing;
     }
 
     public static void render(DrawContext context, int mouseX, int mouseY) {
         if (setting == null) {
             return;
         }
+        if (closing && openAnim.value() <= 0.002F) {
+            setting = null;
+            closing = false;
+            return;
+        }
         Object[] values = setting.values();
         float height = height();
+        float appear = openAnim.value();
+        boolean animating = appear < 0.999F;
+        if (animating) {
+            Render2D.pushScale(context, x + width / 2.0F, y + height / 2.0F,
+                    0.9F + 0.1F * appear);
+        }
         Render2D.roundedBox(context, x, y, width, height, 7.0F, Theme.CARD_BORDER, Theme.WINDOW);
         for (int i = 0; i < values.length; i++) {
             float rowY = y + 4.0F + i * ROW_HEIGHT;
@@ -61,10 +87,13 @@ public final class EnumDropdownPopup {
             Text2D.draw(context, Text.literal(label(setting, values[i])), x + 10.0F,
                     rowY + 5.0F, selected ? Theme.ACCENT : Theme.TEXT, false);
         }
+        if (animating) {
+            Render2D.popScale(context);
+        }
     }
 
     public static boolean mouseClicked(Click click) {
-        if (setting == null) {
+        if (setting == null || closing) {
             return false;
         }
         Object[] values = setting.values();

@@ -39,6 +39,33 @@ public final class Render2D {
             .withCull(false)
             .build();
 
+    /**
+     * 圆角角部专用管线：顶点着色器用原版的 position_tex_color，片元换成 {@code rounded_corner}，
+     * 在屏幕空间里按 SDF 做 1 像素抗锯齿。构建失败时 {@code ROUNDED_CORNER == null}，
+     * {@link #roundedRect} 会退化成直角填充，不会崩。
+     */
+    private static final RenderPipeline ROUNDED_CORNER = buildRoundedCorner();
+
+    private static RenderPipeline buildRoundedCorner() {
+        try {
+            return RenderPipeline.builder()
+                    .withLocation(Identifier.of("yachiyoc", "pipeline/rounded_corner"))
+                    .withVertexShader("core/position_tex_color")
+                    .withFragmentShader(Identifier.of("yachiyoc", "core/rounded_corner"))
+                    .withSampler("Sampler0")
+                    .withUniform("DynamicTransforms", UniformType.UNIFORM_BUFFER)
+                    .withUniform("Projection", UniformType.UNIFORM_BUFFER)
+                    .withBlend(BlendFunction.TRANSLUCENT)
+                    .withVertexFormat(VertexFormats.POSITION_TEXTURE_COLOR, VertexFormat.DrawMode.QUADS)
+                    .withDepthTestFunction(DepthTestFunction.NO_DEPTH_TEST)
+                    .withDepthWrite(false)
+                    .withCull(false)
+                    .build();
+        } catch (Throwable t) {
+            return null;
+        }
+    }
+
     private Render2D() {
     }
 
@@ -95,18 +122,17 @@ public final class Render2D {
     }
 
     /**
-     * Rounded rectangle with horizontal coverage anti-aliasing on the corner
-     * rows. A middle band is filled in one quad, so a full-size window costs
-     * roughly 2*radius + 1 draw calls instead of one per row.
+     * 圆角矩形（连续曲率）：中间带 + 直边用 fill，四个角交给片元着色器算 SDF。
+     *
+     * <p>为什么必须上着色器：GUI 是按 guiScale 放大的，在 Java 里逐"GUI 像素"拼角，
+     * 一个 GUI 像素在屏幕上就是 2~3 个像素，大半径的弧线必然一圈台阶；
+     * 用贴图遮罩又只能在"缩小采样（锯齿）"和"线性过滤（发糊）"之间取舍。
+     * 这里改成四个 r×r 的 quad + {@code rounded_corner.fsh}：片元里按超椭圆方程算到边界的距离，
+     * 再用 {@code fwidth} 做**屏幕空间** 1 像素过渡 —— 缩放、半径都不影响锐度。
      */
     public static void roundedRect(DrawContext ctx, float x, float y, float width, float height,
                                    float radius, int color) {
         if (width <= 0.0F || height <= 0.0F) {
-            return;
-        }
-        Identifier mask = UiTextures.rounded();
-        if (mask != null && width >= 8.0F && height >= 8.0F && radius >= 1.0F) {
-            roundedMask(ctx, mask, x, y, width, height, radius, color);
             return;
         }
         float r = Math.min(radius, Math.min(width, height) / 2.0F);
@@ -117,101 +143,41 @@ public final class Render2D {
         if (x1 <= x0 || y1 <= y0) {
             return;
         }
-
-        int radiusPx = (int) Math.ceil(r);
-        int middleTop = y0 + radiusPx;
-        int middleBottom = y1 - radiusPx;
-        if (middleBottom > middleTop) {
-            ctx.fill(x0, middleTop, x1, middleBottom, color);
+        int ir = Math.round(r);
+        ir = Math.min(ir, Math.min(x1 - x0, y1 - y0) / 2);
+        Identifier white = UiTextures.white();
+        if (ir < 1 || ROUNDED_CORNER == null || white == null) {
+            ctx.fill(x0, y0, x1, y1, color);
+            return;
         }
 
-        for (int row = 0; row < radiusPx; row++) {
-            float dy = r - (row + 0.5F);
-            float inset = r - (float) Math.sqrt(Math.max(0.0F, r * r - dy * dy));
-            int pyTop = y0 + row;
-            int pyBottom = y1 - 1 - row;
-            fillRoundRow(ctx, x, width, pyTop, inset, color);
-            if (pyBottom != pyTop) {
-                fillRoundRow(ctx, x, width, pyBottom, inset, color);
-            }
-        }
+        // 中间竖带（覆盖上下直边） + 左右两条直边
+        ctx.fill(x0 + ir, y0, x1 - ir, y1, color);
+        ctx.fill(x0, y0 + ir, x0 + ir, y1 - ir, color);
+        ctx.fill(x1 - ir, y0 + ir, x1, y1 - ir, color);
+
+        cornerQuad(ctx, white, x0, y0, ir, color, false, false);
+        cornerQuad(ctx, white, x1 - ir, y0, ir, color, true, false);
+        cornerQuad(ctx, white, x0, y1 - ir, ir, color, false, true);
+        cornerQuad(ctx, white, x1 - ir, y1 - ir, ir, color, true, true);
     }
 
-    private static final int MASK_SIZE = 128;
-    private static final int MASK_RADIUS = 40;
-    private static final int MASK_CENTER = MASK_SIZE - MASK_RADIUS * 2;
+    /** 一个角：r×r 的 quad，用负的 uWidth/vHeight 镜像 UV，让着色器按"圆心在 (1,1)"统一处理。 */
+    private static void cornerQuad(DrawContext ctx, Identifier white, int x, int y, int size,
+                                   int color, boolean flipX, boolean flipY) {
+        float u = flipX ? 1.0F : 0.0F;
+        float v = flipY ? 1.0F : 0.0F;
+        int uWidth = flipX ? -1 : 1;
+        int vHeight = flipY ? -1 : 1;
+        ctx.drawTexture(ROUNDED_CORNER, white, x, y, u, v, size, size,
+                uWidth, vHeight, 1, 1, color);
+    }
 
     /**
-     * Nine-slice of the anti-aliased mask. Corners keep their radius, edges and
-     * center stretch, and the final color is applied as a vertex tint.
+     * 连续曲率指数，必须和 {@code rounded_corner.fsh} 里的 {@code POWER} 一致：
+     * 2.0 = 正圆，3.0 = 现在这样，4~5 = 越来越接近方角。
      */
-    private static void roundedMask(DrawContext ctx, Identifier mask, float x, float y,
-                                    float width, float height, float radius, int color) {
-        int r = Math.max(1, (int) Math.round(Math.min(radius, Math.min(width, height) / 2.0F)));
-        int w = Math.max(1, (int) Math.round(width));
-        int h = Math.max(1, (int) Math.round(height));
-        int ix = (int) Math.round(x);
-        int iy = (int) Math.round(y);
-        int midW = Math.max(0, w - r * 2);
-        int midH = Math.max(0, h - r * 2);
-
-        // corners
-        quad(ctx, mask, ix, iy, 0, 0, MASK_RADIUS, MASK_RADIUS, r, r, color);
-        quad(ctx, mask, ix + w - r, iy, MASK_SIZE - MASK_RADIUS, 0, MASK_RADIUS, MASK_RADIUS, r, r, color);
-        quad(ctx, mask, ix, iy + h - r, 0, MASK_SIZE - MASK_RADIUS, MASK_RADIUS, MASK_RADIUS, r, r, color);
-        quad(ctx, mask, ix + w - r, iy + h - r,
-                MASK_SIZE - MASK_RADIUS, MASK_SIZE - MASK_RADIUS, MASK_RADIUS, MASK_RADIUS, r, r, color);
-
-        if (midW > 0) {
-            quad(ctx, mask, ix + r, iy, MASK_RADIUS, 0, MASK_CENTER, MASK_RADIUS, midW, r, color);
-            quad(ctx, mask, ix + r, iy + h - r,
-                    MASK_RADIUS, MASK_SIZE - MASK_RADIUS, MASK_CENTER, MASK_RADIUS, midW, r, color);
-        }
-        if (midH > 0) {
-            quad(ctx, mask, ix, iy + r, 0, MASK_RADIUS, MASK_RADIUS, MASK_CENTER, r, midH, color);
-            quad(ctx, mask, ix + w - r, iy + r,
-                    MASK_SIZE - MASK_RADIUS, MASK_RADIUS, MASK_RADIUS, MASK_CENTER, r, midH, color);
-        }
-        if (midW > 0 && midH > 0) {
-            quad(ctx, mask, ix + r, iy + r, MASK_RADIUS, MASK_RADIUS,
-                    MASK_CENTER, MASK_CENTER, midW, midH, color);
-        }
-    }
-
-    private static void quad(DrawContext ctx, Identifier texture,
-                             int destX, int destY, int srcX, int srcY,
-                             int srcW, int srcH, int destW, int destH, int color) {
-        if (destW <= 0 || destH <= 0) {
-            return;
-        }
-        ctx.drawTexture(RenderPipelines.GUI_TEXTURED, texture,
-                destX, destY, srcX, srcY,
-                destW, destH, srcW, srcH, MASK_SIZE, MASK_SIZE, color);
-    }
-
-    private static void fillRoundRow(DrawContext ctx, float x, float width, int y, float inset, int color) {
-        float left = x + inset;
-        float right = x + width - inset;
-        int leftFull = (int) Math.ceil(left);
-        int rightFull = (int) Math.floor(right);
-        if (rightFull <= leftFull) {
-            return;
-        }
-        ctx.fill(leftFull, y, rightFull, y + 1, color);
-
-        float leftCoverage = 1.0F - (left - (float) Math.floor(left));
-        if (leftCoverage > 0.01F && leftCoverage < 0.99F) {
-            int edge = (int) Math.floor(left);
-            ctx.fill(edge, y, edge + 1, y + 1, withAlpha(color, leftCoverage));
-        }
-
-        float rightCoverage = right - (float) Math.floor(right);
-        if (rightCoverage > 0.01F && rightCoverage < 0.99F) {
-            int edge = (int) Math.floor(right);
-            ctx.fill(edge, y, edge + 1, y + 1, withAlpha(color, rightCoverage));
-        }
-    }
-
+    public static final float SQUIRCLE_POWER = 3.0F;
     public static void roundedBox(DrawContext ctx, float x, float y, float width, float height,
                                   float radius, int border, int fill) {
         roundedRect(ctx, x, y, width, height, radius, border);
@@ -219,8 +185,23 @@ public final class Render2D {
                 Math.max(0.0F, radius - 1.0F), fill);
     }
 
-    /** Soft layered elevation shadow. */
-    public static void elevation(DrawContext ctx, float x, float y, float width, float height,
+    /**
+     * 以 {@code (centerX, centerY)} 为锚点缩放整段绘制（弹窗/悬浮窗出现动画用），
+     * 记得在画完以后调用 {@link #popScale}。
+     */
+    public static void pushScale(DrawContext ctx, float centerX, float centerY, float scale) {
+        org.joml.Matrix3x2fStack matrices = ctx.getMatrices();
+        matrices.pushMatrix();
+        matrices.translate(centerX, centerY);
+        matrices.scale(scale, scale);
+        matrices.translate(-centerX, -centerY);
+    }
+
+    public static void popScale(DrawContext ctx) {
+        ctx.getMatrices().popMatrix();
+    }
+
+    /** Soft layered elevation shadow. */    public static void elevation(DrawContext ctx, float x, float y, float width, float height,
                                  float radius, int color) {
         for (int i = 4; i >= 1; i--) {
             float grow = i * 1.8F;

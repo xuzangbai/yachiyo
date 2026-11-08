@@ -47,10 +47,10 @@ public final class ClickGuiScreen extends Screen {
     private final List<ModuleCard> visibleCards = new ArrayList<>();
     private final HudRailButton hudRail = new HudRailButton();
     private ModuleSettingsWindow moduleWindow;
-    private final Anim open = new Anim(0.0F, 300L, Easing.OUT_QUINT);
-    private final Anim switchAnim = new Anim(1.0F, 260L, Easing.OUT_QUINT);
-    private final Anim railY = new Anim(0.0F, 200L, Easing.OUT_QUINT);
-    private final Anim railHeight = new Anim(0.0F, 200L, Easing.OUT_QUINT);
+    private final Anim open = new Anim(0.0F, 280L, Easing.OUT_EXPO);
+    private final Anim switchAnim = new Anim(1.0F, 240L, Easing.OUT_EXPO);
+    private final Anim railY = new Anim(0.0F, 210L, Easing.OUT_QUART);
+    private final Anim railHeight = new Anim(0.0F, 210L, Easing.OUT_QUART);
     private final Anim closeHover = new Anim(0.0F, 120L, Easing.OUT_CUBIC);
 
     private SearchField search;
@@ -123,14 +123,16 @@ public final class ClickGuiScreen extends Screen {
         float headerHeight = Theme.HEADER_HEIGHT;
         float footerHeight = Theme.FOOTER_HEIGHT;
         contentX = windowX + padding;
-        contentY = windowY + headerHeight;
+        // 往下让 5px：头部那条 1px 分隔线画在 headerHeight-1，面板从 headerHeight+1 开始，
+        // 这样线不会被内容面板盖住（以前面板顶到 headerHeight-4，把线吃掉了）。
+        contentY = windowY + headerHeight + 5.0F;
         float contentBottom = windowY + windowHeight - footerHeight - 8.0F;
         contentHeight = contentBottom - contentY;
 
         sidebarWidth = Theme.SIDEBAR_WIDTH;
         sidebarX = windowX + windowWidth - padding - sidebarWidth;
-        sidebarY = contentY;
-        sidebarHeight = contentHeight;
+        sidebarY = contentY - 4.0F;
+        sidebarHeight = contentHeight + 8.0F;
         contentWidth = sidebarX - contentX - Theme.GAP;
 
         cardsY = contentY + 38.0F;
@@ -297,6 +299,12 @@ public final class ClickGuiScreen extends Screen {
                 windowY + windowHeight - 17.0F, Theme.TEXT_MUTED, false);
         if (moduleWindow != null) {
             moduleWindow.render(ctx, mouseX, mouseY, width, height);
+            // 关闭动画播完再销毁
+            if (moduleWindow.finishedClosing()) {
+                moduleWindow.cancelListening();
+                moduleWindow = null;
+                YachiyoC.config().save();
+            }
         }
         ColorPickerPopup.render(ctx, mouseX, mouseY);
         EnumDropdownPopup.render(ctx, mouseX, mouseY);
@@ -331,8 +339,8 @@ public final class ClickGuiScreen extends Screen {
         if (moduleWindow != null && moduleWindow.mouseClicked(click, width, height)) {
             if (moduleWindow.closeRequested()) {
                 moduleWindow.cancelListening();
-                moduleWindow = null;
-                YachiyoC.config().save();
+                // 不立刻销毁：播关闭动画，上一段 render 里收尾
+                moduleWindow.beginClose();
             }
             return true;
         }

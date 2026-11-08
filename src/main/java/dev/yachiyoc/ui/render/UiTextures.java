@@ -37,9 +37,24 @@ public final class UiTextures {
         return load("logo_glow", "/assets/yachiyoc/textures/logo/logo_glow.png");
     }
 
-    /** 64x64 white rounded mask with an 18px radius, generated offline. */
-    public static Identifier rounded() {
-        return load("rounded", "/assets/yachiyoc/textures/ui/rounded.png");
+    /** 1×1 纯白纹理：给「自定义片元着色器 + drawTexture」的管线当占位采样用。 */
+    public static Identifier white() {
+        Identifier existing = CACHE.get("white");
+        if (existing != null) {
+            return existing;
+        }
+        try {
+            NativeImage image = new NativeImage(NativeImage.Format.RGBA, 1, 1, false);
+            image.setColorArgb(0, 0, 0xFFFFFFFF);
+            Identifier id = Identifier.of("yachiyoc", "dynamic/white");
+            NativeImageBackedTexture texture = new NativeImageBackedTexture(() -> "yachiyoc_white", image);
+            MinecraftClient.getInstance().getTextureManager().registerTexture(id, texture);
+            CACHE.put("white", id);
+            return id;
+        } catch (Throwable t) {
+            LOGGER.warn("white texture failed", t);
+            return null;
+        }
     }
 
     private static Identifier load(String key, String path) {

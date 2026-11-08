@@ -28,6 +28,11 @@ public final class ModuleSettingsWindow {
 
     private final Module module;
     private final List<SettingRow> rows = new ArrayList<>();
+    /** 打开时从 94% 放大到 100%，关闭时缩回去。 */
+    private final dev.yachiyoc.ui.anim.Anim open =
+            new dev.yachiyoc.ui.anim.Anim(0.0F, 190L, dev.yachiyoc.ui.anim.Easing.OUT_BACK);
+    /** 正在播放关闭动画；播完由外层置空。 */
+    private boolean closing;
     private float x;
     private float y;
     private float height;
@@ -49,10 +54,30 @@ public final class ModuleSettingsWindow {
         for (Setting<?> setting : module.settings()) {
             rows.add(new SettingRow(module, setting));
         }
+        // 打开瞬间开始播放出现动画
+        open.snap(0.0F);
+        open.set(1.0F);
     }
 
     public Module module() {
         return module;
+    }
+
+    /** 开始播放关闭动画（缩回 94%），播完由 {@link #finishedClosing()} 通知外层销毁。 */
+    public void beginClose() {
+        if (closing) {
+            return;
+        }
+        closing = true;
+        open.set(0.0F, 140L, dev.yachiyoc.ui.anim.Easing.OUT_QUART);
+    }
+
+    public boolean finishedClosing() {
+        return closing && open.value() <= 0.002F;
+    }
+
+    public boolean closing() {
+        return closing;
     }
 
     public boolean closeRequested() {
@@ -64,6 +89,10 @@ public final class ModuleSettingsWindow {
         x = clamp(x, 6.0F, screenWidth - WIDTH - 6.0F);
         y = clamp(y, 6.0F, screenHeight - height - 6.0F);
         float contentHeight = height - HEADER - FOOTER - 4.0F;
+
+        // 出现动画：从 94% 略微"扑"到 100%（OUT_BACK 带一点点过冲）
+        float appear = open.value();
+        Render2D.pushScale(context, x + WIDTH / 2.0F, y + height / 2.0F, 0.94F + 0.06F * appear);
 
         Render2D.elevation(context, x, y, WIDTH, height, 18.0F, Theme.SHADOW);
         Render2D.roundedBox(context, x, y, WIDTH, height, 18.0F,
@@ -121,6 +150,8 @@ public final class ModuleSettingsWindow {
         if (confirmReset) {
             renderConfirm(context, mouseX, mouseY, screenWidth, screenHeight);
         }
+
+        Render2D.popScale(context);
     }
 
     private void renderConfirm(DrawContext context, float mouseX, float mouseY,
@@ -158,6 +189,10 @@ public final class ModuleSettingsWindow {
     }
 
     public boolean mouseClicked(Click click, int screenWidth, int screenHeight) {
+        if (closing) {
+            return false;
+        }
+        
         if (confirmReset) {
             if (click.x() >= confirmX && click.x() <= confirmX + 90
                     && click.y() >= confirmY && click.y() <= confirmY + 24) {
@@ -198,6 +233,10 @@ public final class ModuleSettingsWindow {
     }
 
     public boolean mouseDragged(Click click, double deltaX, double deltaY) {
+        if (closing) {
+            return false;
+        }
+        
         if (confirmReset) {
             return true;
         }
@@ -233,6 +272,10 @@ public final class ModuleSettingsWindow {
     }
 
     public boolean mouseScrolled(double mouseX, double mouseY, double amount) {
+        if (closing) {
+            return false;
+        }
+        
         if (confirmReset) {
             return true;
         }
@@ -246,6 +289,10 @@ public final class ModuleSettingsWindow {
     }
 
     public boolean keyPressed(KeyInput input) {
+        if (closing) {
+            return false;
+        }
+        
         if (confirmReset) {
             if (input.key() == GLFW.GLFW_KEY_ESCAPE) {
                 confirmReset = false;
