@@ -11,6 +11,7 @@ import dev.yachiyoc.module.setting.BoolSetting;
 import dev.yachiyoc.module.setting.DoubleSetting;
 import dev.yachiyoc.module.setting.EnumSetting;
 import dev.yachiyoc.module.setting.RegistryListSetting;
+import dev.yachiyoc.net.ServerMovementState;
 import dev.yachiyoc.platform.Debug;
 import dev.yachiyoc.platform.RegistryKind;
 import dev.yachiyoc.rotation.RotationChoice;
@@ -71,6 +72,18 @@ public final class Aura extends Module {
     /** 吃东西 / 喝药 / 举盾时不打，并且把手换回去。 */
     private final BoolSetting pauseEating =
             add(new BoolSetting("aura", "pause_eating", true));
+    /** 切锤：下落途中把锤换到手上打重击（打完换回原武器）。 */
+    private final BoolSetting maceSwap =
+            add(new BoolSetting("aura", "mace_swap", false));
+    /** 掉落多少格才切锤；0 = 只要有锤就每一刀都切。 */
+    private final DoubleSetting maceFall =
+            add(new DoubleSetting("aura", "mace_fall", 0.0, 0.0, 30.0, 0.5));
+    /** 伪造下落（服务端会以为你在高处掉下来）——只建议单人 / 无反作弊服。 */
+    private final BoolSetting maceSpoof =
+            add(new BoolSetting("aura", "mace_spoof", false));
+    /** 伪造的下落格数。 */
+    private final DoubleSetting maceSpoofHeight =
+            add(new DoubleSetting("aura", "mace_spoof_height", 25.0, 3.0, 100.0, 1.0));
 
     public Aura() {
         super("aura", ModuleCategory.COMBAT, true);
@@ -93,10 +106,22 @@ public final class Aura extends Module {
                 "setting.yachiyoc.aura.weapon_cooldown.description"));
         pauseEating.description(() -> net.minecraft.text.Text.translatable(
                 "setting.yachiyoc.aura.pause_eating.description"));
+        maceSwap.description(() -> net.minecraft.text.Text.translatable(
+                "setting.yachiyoc.aura.mace_swap.description"));
+        maceFall.description(() -> net.minecraft.text.Text.translatable(
+                "setting.yachiyoc.aura.mace_fall.description"));
+        maceSpoof.description(() -> net.minecraft.text.Text.translatable(
+                "setting.yachiyoc.aura.mace_spoof.description"));
+        maceSpoofHeight.description(() -> net.minecraft.text.Text.translatable(
+                "setting.yachiyoc.aura.mace_spoof_height.description"));
         weaponType.visibleWhen(autoSwap::get);
         switchMode.visibleWhen(autoSwap::get);
         swapInventory.visibleWhen(autoSwap::get);
         weaponCooldown.visibleWhen(() -> autoSwap.get() && attackDelay.get() <= 0.0);
+        maceSwap.visibleWhen(autoSwap::get);
+        maceFall.visibleWhen(() -> autoSwap.get() && maceSwap.get() && !maceSpoof.get());
+        maceSpoof.visibleWhen(() -> autoSwap.get() && maceSwap.get());
+        maceSpoofHeight.visibleWhen(() -> autoSwap.get() && maceSwap.get() && maceSpoof.get());
         RotationManager.initialize();
         ClientTickEvents.START_CLIENT_TICK.register(this::tick);
     }
@@ -145,9 +170,11 @@ public final class Aura extends Module {
             }
             return;
         }
+        // 切锤：满足条件时这一 tick 用锤，否则用配置的武器种类
+        WeaponCategory category = maceMode(player) ? WeaponCategory.MACE : weaponType.get();
         if (swap && mode == WeaponSwitchMode.SWAP_BACK) {
             // 不管冷却好没好，只要范围内还有目标就一直拿着武器
-            GhostHand.hold(player, weaponType.get(), swapInventory.get());
+            GhostHand.hold(player, category, swapInventory.get());
         }
 
         Vec3d eye = player.getEyePos();
@@ -164,14 +191,43 @@ public final class Aura extends Module {
                 return;
             }
             switch (mode) {
-                case SILENT -> attackSilent(client, player, target);
+                case SILENT -> attackSilent(client, player, target, category);
                 case PER_ATTACK -> {
-                    GhostHand.hold(player, weaponType.get(), swapInventory.get());
+                    GhostHand.hold(player, category, swapInventory.get());
+                    applyMaceSpoof(player, category);
                     AttackScheduler.attackNow(client, player, target);
                 }
-                case SWAP_BACK -> AttackScheduler.attackNow(client, player, target);
+                case SWAP_BACK -> {
+                    applyMaceSpoof(player, category);
+                    AttackScheduler.attackNow(client, player, target);
+                }
             }
         });
+    }
+
+    /**
+     * 这一 tick 要不要切锤。
+     *
+     * <p>条件：开了切锤、有锤可用、<b>不是滑翔状态</b>（原版滑翔时没有重击加成），
+     * 并且服务端视角的下落距离够 {@code 切锤下落高度}（默认 0 = 每一刀都切）。
+     * 开了伪造下落之后不再看真实下落。
+     */
+    private boolean maceMode(ClientPlayerEntity player) {
+        if (!maceSwap.get() || player.isGliding()) {
+            return false;
+        }
+        if (!maceSpoof.get() && ServerMovementState.fallDistance() < maceFall.get()) {
+            return false;
+        }
+        return !GhostHand.findWeaponStack(player, WeaponCategory.MACE, swapInventory.get()).isEmpty();
+    }
+
+    /** 伪造下落：真正出手前给服务端塞一段假的掉落位移（锤子重击用）。 */
+    private void applyMaceSpoof(ClientPlayerEntity player, WeaponCategory category) {
+        if (category != WeaponCategory.MACE || !maceSpoof.get()) {
+            return;
+        }
+        ServerMovementState.spoofFall(player, maceSpoofHeight.get());
     }
 
     /**
@@ -230,22 +286,26 @@ public final class Aura extends Module {
      * <p>冷却在换手<b>之前</b>判（进到这里之前 {@link #cooldownReady} 已经按要用的那把武器算过）：
      * 换进来的刀会改 {@code ATTACK_SPEED} 属性，换完再判一次就变成“刀拿在手上等 cd”。
      */
-    private void attackSilent(MinecraftClient client, ClientPlayerEntity player, Entity target) {
-        int hotbar = GhostHand.findHotbarSlot(player, weaponType.get());
+    private void attackSilent(MinecraftClient client, ClientPlayerEntity player, Entity target,
+                              WeaponCategory category) {
+        int hotbar = GhostHand.findHotbarSlot(player, category);
         if (hotbar >= 0) {
-            // 快捷栏本来就有刀：只给服务端发切手包，本地手持完全不动
+            // 快捷栏本来就有这把武器：只给服务端发切手包，本地手持完全不动
+            applyMaceSpoof(player, category);
             AttackScheduler.attackSilent(client, player, target, hotbar);
             return;
         }
         Runnable restore = swapInventory.get() && !GhostHand.silentBusy(player)
-                ? GhostHand.swapInSilent(player, weaponType.get())
+                ? GhostHand.swapInSilent(player, category)
                 : null;
         if (restore == null) {
             // 背包里没有这一类武器（或上一轮换手还没收干净）：就用现在的手打
+            applyMaceSpoof(player, category);
             AttackScheduler.attackNow(client, player, target);
             return;
         }
         try {
+            applyMaceSpoof(player, category);
             AttackScheduler.attackNow(client, player, target);
         } finally {
             // 打没打中都要换回去：换手这件事不能留在手上过 tick

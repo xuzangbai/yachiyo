@@ -235,6 +235,14 @@
   "setting.yachiyoc.aura.weapon_cooldown.description": "Use the attack speed of the weapon that actually hits, not the held item. Ignored when Attack Delay is above 0.",
   "setting.yachiyoc.aura.pause_eating": "Pause When Eating",
   "setting.yachiyoc.aura.pause_eating.description": "Stop attacking while eating, drinking or blocking; swapped weapons go back.",
+  "setting.yachiyoc.aura.mace_swap": "Mace Swap",
+  "setting.yachiyoc.aura.mace_swap.description": "Swap the mace in for the smash hit and back right after; skipped while gliding (no smash bonus then).",
+  "setting.yachiyoc.aura.mace_fall": "Mace Min Fall",
+  "setting.yachiyoc.aura.mace_fall.description": "Fall distance the server must see before swapping to the mace; 0 = every hit when a mace is available. The smash starts at 1.5 blocks.",
+  "setting.yachiyoc.aura.mace_spoof": "Spoof Fall (Risky)",
+  "setting.yachiyoc.aura.mace_spoof.description": "Sends fake fall packets before each hit so you get the full smash bonus while standing. Only for singleplayer / servers without anticheat.",
+  "setting.yachiyoc.aura.mace_spoof_height": "Spoof Height",
+  "setting.yachiyoc.aura.mace_spoof_height.description": "Faked fall distance in blocks (default 25). Higher hits harder but is far more likely to be set back or kicked.",
   "setting.yachiyoc.client.config.rotation_mode.value.silent_movement": "Silent Movement",
   "setting.yachiyoc.client.trigger.value.hold_toggle": "Hold Toggle"
 }

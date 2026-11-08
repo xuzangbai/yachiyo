@@ -235,6 +235,14 @@
   "setting.yachiyoc.aura.weapon_cooldown.description": "按真正出手的那把武器的攻速算冷却，而不是手上拿着的东西；攻击延迟 > 0 时无效。",
   "setting.yachiyoc.aura.pause_eating": "进食时暂停",
   "setting.yachiyoc.aura.pause_eating.description": "吃东西 / 喝药 / 举盾时不打，并把手上的武器换回去。",
+  "setting.yachiyoc.aura.mace_swap": "切锤加伤",
+  "setting.yachiyoc.aura.mace_swap.description": "满足条件时把锤换到手上打重击，打完换回原武器；滑翔时不切（原版滑翔没有重击加成）。",
+  "setting.yachiyoc.aura.mace_fall": "切锤下落高度",
+  "setting.yachiyoc.aura.mace_fall.description": "服务端视角下落多少格才切锤；0 = 背包有锤就每一刀都切。重击从 1.5 格起算。",
+  "setting.yachiyoc.aura.mace_spoof": "伪造下落（危险）",
+  "setting.yachiyoc.aura.mace_spoof.description": "出手前给服务端伪造一段下落，站在地上也能吃满重击。建议只在单人 / 无反作弊服务器开。",
+  "setting.yachiyoc.aura.mace_spoof_height": "伪造下落高度",
+  "setting.yachiyoc.aura.mace_spoof_height.description": "伪造的格数，默认 25。越高伤害越夸张，也越容易被拉回或踢出。",
   "setting.yachiyoc.client.config.rotation_mode.value.silent_movement": "静默移动",
   "setting.yachiyoc.client.trigger.value.hold_toggle": "按住切换"
 }
