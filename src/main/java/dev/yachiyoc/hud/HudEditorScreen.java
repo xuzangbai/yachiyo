@@ -466,7 +466,7 @@ public final class HudEditorScreen extends Screen {
     private void openSettings(HudElement element) {
         settingsTarget = element;
         settingRows.clear();
-        element.settings().forEach(setting -> settingRows.add(new SettingRow(setting)));
+        element.settings().forEach(setting -> settingRows.add(new SettingRow(null, setting)));
     }
 
     @Override

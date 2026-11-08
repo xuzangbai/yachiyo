@@ -77,10 +77,13 @@ public final class Aura extends Module {
             add(new BoolSetting("aura", "mace_swap", false));
     /** 掉落多少格才切锤；0 = 只要有锤就每一刀都切。 */
     private final DoubleSetting maceFall =
-            add(new DoubleSetting("aura", "mace_fall", 0.0, 0.0, 30.0, 0.5));
+            add(new DoubleSetting("aura", "mace_fall", 1.5, 0.0, 30.0, 0.5));
     /** 伪造下落（服务端会以为你在高处掉下来）——只建议单人 / 无反作弊服。 */
     private final BoolSetting maceSpoof =
             add(new BoolSetting("aura", "mace_spoof", false));
+    /** 切锤固定用静默换手，不受“切换模式”影响。 */
+    private final BoolSetting maceSilent =
+            add(new BoolSetting("aura", "mace_silent", true));
     /** 伪造的下落格数。 */
     private final DoubleSetting maceSpoofHeight =
             add(new DoubleSetting("aura", "mace_spoof_height", 25.0, 3.0, 100.0, 1.0));
@@ -112,6 +115,8 @@ public final class Aura extends Module {
                 "setting.yachiyoc.aura.mace_fall.description"));
         maceSpoof.description(() -> net.minecraft.text.Text.translatable(
                 "setting.yachiyoc.aura.mace_spoof.description"));
+        maceSilent.description(() -> net.minecraft.text.Text.translatable(
+                "setting.yachiyoc.aura.mace_silent.description"));
         maceSpoofHeight.description(() -> net.minecraft.text.Text.translatable(
                 "setting.yachiyoc.aura.mace_spoof_height.description"));
         weaponType.visibleWhen(autoSwap::get);
@@ -121,6 +126,7 @@ public final class Aura extends Module {
         maceSwap.visibleWhen(autoSwap::get);
         maceFall.visibleWhen(() -> autoSwap.get() && maceSwap.get() && !maceSpoof.get());
         maceSpoof.visibleWhen(() -> autoSwap.get() && maceSwap.get());
+        maceSilent.visibleWhen(() -> autoSwap.get() && maceSwap.get());
         maceSpoofHeight.visibleWhen(() -> autoSwap.get() && maceSwap.get() && maceSpoof.get());
         RotationManager.initialize();
         ClientTickEvents.START_CLIENT_TICK.register(this::tick);
@@ -172,9 +178,11 @@ public final class Aura extends Module {
         }
         // 切锤：满足条件时这一 tick 用锤，否则用配置的武器种类
         WeaponCategory category = maceMode(player) ? WeaponCategory.MACE : weaponType.get();
-        if (swap && mode == WeaponSwitchMode.SWAP_BACK) {
+        // 切锤固定走静默换手（换上去 → 打 → 同一 tick 换回），不受“切换模式”影响
+        boolean silentMace = category == WeaponCategory.MACE && maceSilent.get();
+        if (swap && mode == WeaponSwitchMode.SWAP_BACK && !silentMace) {
             // 不管冷却好没好，只要范围内还有目标就一直拿着武器
-            GhostHand.hold(player, category, swapInventory.get());
+            GhostHand.hold(player, category, swapInventory.get(), true);
         }
 
         Vec3d eye = player.getEyePos();
@@ -190,10 +198,15 @@ public final class Aura extends Module {
                 AttackScheduler.attack(client, player, target, delay);
                 return;
             }
+            if (silentMace) {
+                attackSilent(client, player, target, category);
+                return;
+            }
             switch (mode) {
                 case SILENT -> attackSilent(client, player, target, category);
                 case PER_ATTACK -> {
-                    GhostHand.hold(player, category, swapInventory.get());
+                    // 每次攻击切换：只负责切过去，之后不管换回原快捷栏
+                    GhostHand.hold(player, category, swapInventory.get(), false);
                     applyMaceSpoof(player, category);
                     AttackScheduler.attackNow(client, player, target);
                 }

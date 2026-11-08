@@ -47,9 +47,6 @@ public final class AttackScheduler {
 
     /** 原版口径：按当前手持物判冷却。 */
     public static boolean canAttack(ClientPlayerEntity player, double delayMs) {
-        if (player.isUsingItem()) {
-            return false;
-        }
         if (delayMs > 0.0) {
             return System.currentTimeMillis() - lastAttackMs >= (long) delayMs;
         }
@@ -72,9 +69,6 @@ public final class AttackScheduler {
     public static boolean canAttack(ClientPlayerEntity player, double delayMs, ItemStack weapon) {
         if (weapon == null || weapon.isEmpty()) {
             return canAttack(player, delayMs);
-        }
-        if (player.isUsingItem()) {
-            return false;
         }
         if (delayMs > 0.0) {
             return System.currentTimeMillis() - lastAttackMs >= (long) delayMs;

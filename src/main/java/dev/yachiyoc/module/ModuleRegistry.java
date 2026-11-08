@@ -1,6 +1,7 @@
 package dev.yachiyoc.module;
 
 import com.google.gson.JsonElement;
+import com.google.gson.JsonPrimitive;
 import dev.yachiyoc.config.ConfigData;
 import dev.yachiyoc.module.impl.client.Colors;
 import dev.yachiyoc.module.impl.client.Config;
@@ -20,6 +21,9 @@ import java.util.Map;
  * start-up order deterministic and makes trimming builds trivial.
  */
 public final class ModuleRegistry {
+    /** 功能级按键在模块设置表里的键前缀（`key:mace_swap` → 70）。 */
+    private static final String BIND_PREFIX = "key:";
+
     private final Map<String, Module> byId = new LinkedHashMap<>();
     private final List<Module> modules = new ArrayList<>();
 
@@ -78,6 +82,15 @@ public final class ModuleRegistry {
                     setting.fromJson(element);
                 }
             }
+            // 功能级按键存在同一个表里，用 "key:" 前缀区分
+            for (Map.Entry<String, JsonElement> entry : values.entrySet()) {
+                if (entry.getKey().startsWith(BIND_PREFIX)
+                        && entry.getValue() != null
+                        && entry.getValue().isJsonPrimitive()) {
+                    module.setBindById(entry.getKey().substring(BIND_PREFIX.length()),
+                            entry.getValue().getAsInt());
+                }
+            }
         }
     }
 
@@ -87,6 +100,9 @@ public final class ModuleRegistry {
             Map<String, JsonElement> values = new LinkedHashMap<>();
             for (Setting<?> setting : module.settings()) {
                 values.put(setting.id(), setting.toJson());
+            }
+            for (Map.Entry<String, Integer> entry : module.settingBinds().entrySet()) {
+                values.put(BIND_PREFIX + entry.getKey(), new JsonPrimitive(entry.getValue()));
             }
             data.moduleSettings.put(module.id(), values);
         }

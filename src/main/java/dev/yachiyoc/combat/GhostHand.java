@@ -109,13 +109,14 @@ public final class GhostHand {
      * 让手上拿着目标种类的武器（已经在拿就不动）。保持型模式（每次攻击切换 / 攻击后切回）用。
      *
      * @param allowInventory 快捷栏没有目标武器时，是否允许从背包里换
+     * @param remember       {@code true} = 记下换手前的状态，之后 {@link #release} 会换回去；
+     *                       {@code false} = 只负责切过去，之后不管（“每次攻击切换”模式）
      * @return 手上现在是不是目标武器
      */
-    public static boolean hold(ClientPlayerEntity player, WeaponCategory category, boolean allowInventory) {
-        if (player.isUsingItem()) {
-            // 吃东西 / 举盾 / 拉弓时别抢手
-            return false;
-        }
+    public static boolean hold(ClientPlayerEntity player, WeaponCategory category, boolean allowInventory,
+                               boolean remember) {
+        // 注意：这里刻意不看 isUsingItem —— “进食时暂停”由光环那个开关决定，
+        // 关掉之后就是要照常换手出手（换走食物会打断进食，这正是“不暂停”的语义）。
         PlayerInventory inventory = player.getInventory();
         int selected = inventory.getSelectedSlot();
         int index = findWeapon(inventory, category, allowInventory);
@@ -126,8 +127,8 @@ public final class GhostHand {
             return true;
         }
         if (index < 9) {
-            if (pending == null) {
-                pending = Pending.hotbar(selected);
+            if (pending == null && remember) {
+                pending = Pending.hotbar(selected, true);
             }
             setHotbar(player, index);
             return true;
@@ -143,15 +144,15 @@ public final class GhostHand {
         int syncId = player.currentScreenHandler.syncId;
         clickSwap(player, syncId, handlerSlot.getAsInt(), selected);
         pending = Pending.inventory(syncId, handlerSlot.getAsInt(), selected, index,
-                inventory.getStack(index).copy());
+                inventory.getStack(index).copy(), remember);
         return true;
     }
 
-    /** 之前 {@link #hold} 换过手就换回来；没换过什么都不做。静默切刀那一轮由看门狗自己收尾。 */
+    /** 之前 {@link #hold} 换过手就换回来；没换过、或者当初说了“不用管”就什么都不做。 */
     public static void release(ClientPlayerEntity player) {
         Pending state = pending;
         pending = null;
-        if (state == null || player == null) {
+        if (state == null || player == null || !state.restore()) {
             return;
         }
         if (state.hotbarSlot >= 0) {
@@ -187,9 +188,6 @@ public final class GhostHand {
      */
     public static Runnable swapInSilent(ClientPlayerEntity player, WeaponCategory category) {
         PlayerInventory inventory = player.getInventory();
-        if (player.isUsingItem()) {
-            return null;
-        }
         int index = bestInRange(inventory, category, 9, 36);
         if (index < 0) {
             return null;
@@ -445,14 +443,14 @@ public final class GhostHand {
 
     /** 换手前的手持状态，用于原样换回。 */
     private record Pending(int syncId, int handlerSlot, int hotbarButton, int hotbarSlot,
-                           int sourceIndex, ItemStack weapon) {
-        static Pending hotbar(int slot) {
-            return new Pending(-1, -1, -1, slot, -1, ItemStack.EMPTY);
+                           int sourceIndex, ItemStack weapon, boolean restore) {
+        static Pending hotbar(int slot, boolean restore) {
+            return new Pending(-1, -1, -1, slot, -1, ItemStack.EMPTY, restore);
         }
 
         static Pending inventory(int syncId, int handlerSlot, int hotbarButton, int sourceIndex,
-                                 ItemStack weapon) {
-            return new Pending(syncId, handlerSlot, hotbarButton, -1, sourceIndex, weapon);
+                                 ItemStack weapon, boolean restore) {
+            return new Pending(syncId, handlerSlot, hotbarButton, -1, sourceIndex, weapon, restore);
         }
     }
 

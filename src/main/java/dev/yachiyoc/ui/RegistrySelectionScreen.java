@@ -51,6 +51,16 @@ public final class RegistrySelectionScreen extends Screen {
     private float closeY;
     private static final float CLOSE_SIZE = 18.0F;
 
+    /** 两栏标题行右侧的批量勾选框：「全选」加、 「全不选」减（都只作用于当前标签页 + 搜索词）。 */
+    private float selectAllX;
+    private float selectAllY;
+    private float selectAllW;
+    private float clearAllX;
+    private float clearAllY;
+    private float clearAllW;
+    private static final float CHECK_SIZE = 11.0F;
+    private static final float CHECK_HEIGHT = 12.0F;
+
     public RegistrySelectionScreen(RegistryListSetting setting, Screen parent) {
         super(Text.translatable(setting.kind().titleKey()));
         this.setting = setting;
@@ -119,6 +129,16 @@ public final class RegistrySelectionScreen extends Screen {
         List<RegistryCatalog.Entry> right = selected();
         leftScroll = clamp(leftScroll, 0.0F, maxScroll(left));
         rightScroll = clamp(rightScroll, 0.0F, maxScroll(right));
+
+        // 「全选」放左栏标题行右侧，「全不选」放右栏标题行右侧，和「待选 (N) / 已选 (N)」同一行
+        Text selectAllLabel = Text.translatable("selector.yachiyoc.select_all");
+        selectAllW = CHECK_SIZE + 5.0F + Text2D.width(selectAllLabel);
+        selectAllX = leftX + leftWidth - 12.0F - selectAllW;
+        selectAllY = leftY + 6.0F;
+        Text clearAllLabel = Text.translatable("selector.yachiyoc.clear_all");
+        clearAllW = CHECK_SIZE + 5.0F + Text2D.width(clearAllLabel);
+        clearAllX = rightX + rightWidth - 12.0F - clearAllW;
+        clearAllY = rightY + 6.0F;
     }
 
     private void drawCategories(DrawContext context, int mouseX, int mouseY) {
@@ -151,6 +171,11 @@ public final class RegistrySelectionScreen extends Screen {
         Text2D.draw(context, Text.translatable(left ? "selector.yachiyoc.available"
                         : "selector.yachiyoc.selected", entries.size()),
                 x + 10.0F, y + 8.0F, left ? Theme.TEXT_MUTED : Theme.ACCENT, false);
+        if (left) {
+            drawBulkBox(context, mouseX, mouseY, true, entries.isEmpty());
+        } else {
+            drawBulkBox(context, mouseX, mouseY, false, entries.isEmpty());
+        }
 
         float listTop = y + 24.0F;
         float listHeight = h - 30.0F;
@@ -173,8 +198,34 @@ public final class RegistrySelectionScreen extends Screen {
         Render2D.unscissor(context);
     }
 
-    private void drawRow(DrawContext context, RegistryCatalog.Entry entry, float x, float rowY,
-                         float width, boolean left, int mouseX, int mouseY) {
+    /**
+     * 标题行右侧的批量勾选框。
+     *
+     * <p>左栏是「全选」（这一页还有待选项就能点，勾上 = 全加完了）；
+     * 右栏是「全不选」（这一页还有已选项就能点，勾上 = 全清空了）。
+     */
+    private void drawBulkBox(DrawContext context, int mouseX, int mouseY, boolean left,
+                             boolean empty) {
+        float bx = left ? selectAllX : clearAllX;
+        float by = left ? selectAllY : clearAllY;
+        float bw = left ? selectAllW : clearAllW;
+        boolean hovered = mouseX >= bx && mouseX <= bx + bw
+                && mouseY >= by && mouseY <= by + CHECK_HEIGHT;
+        int tint = left ? Theme.ACCENT : 0xFFFF7A7A;
+        Render2D.roundedBox(context, bx, by, CHECK_SIZE, CHECK_SIZE, 3.5F,
+                hovered ? tint : Render2D.withAlpha(tint, 0.7F),
+                empty ? Render2D.withAlpha(tint, 0.55F) : Theme.FIELD);
+        if (empty) {
+            Render2D.roundedRect(context, bx + 3.0F, by + 3.0F, 5.0F, 5.0F, 2.0F, Theme.KNOB);
+        }
+        Text2D.draw(context, Text.translatable(left
+                                ? "selector.yachiyoc.select_all"
+                                : "selector.yachiyoc.clear_all"),
+                bx + CHECK_SIZE + 5.0F, by + 1.0F,
+                hovered ? Theme.TEXT : Theme.TEXT_DIM, false);
+    }
+
+    private void drawRow(DrawContext context, RegistryCatalog.Entry entry, float x, float rowY,                         float width, boolean left, int mouseX, int mouseY) {
         boolean hovered = mouseX >= x + 4 && mouseX <= x + width - 4
                 && mouseY >= rowY && mouseY <= rowY + ROW_HEIGHT - 1;
         if (hovered) {
@@ -245,6 +296,33 @@ public final class RegistrySelectionScreen extends Screen {
             return true;
         }
         search.unfocus();
+
+        // 全选：把当前标签页（+ 当前搜索词）里所有待选项一次加进已选
+        if (click.x() >= selectAllX && click.x() <= selectAllX + selectAllW
+                && click.y() >= selectAllY && click.y() <= selectAllY + CHECK_HEIGHT) {
+            List<RegistryCatalog.Entry> entries = available();
+            if (!entries.isEmpty()) {
+                for (RegistryCatalog.Entry entry : entries) {
+                    setting.toggle(entry.id());
+                }
+                leftScroll = 0.0F;
+                save();
+            }
+            return true;
+        }
+        // 全不选：把当前标签页（+ 当前搜索词）里所有已选项一次移除
+        if (click.x() >= clearAllX && click.x() <= clearAllX + clearAllW
+                && click.y() >= clearAllY && click.y() <= clearAllY + CHECK_HEIGHT) {
+            List<RegistryCatalog.Entry> entries = selected();
+            if (!entries.isEmpty()) {
+                for (RegistryCatalog.Entry entry : entries) {
+                    setting.remove(entry.id());
+                }
+                rightScroll = 0.0F;
+                save();
+            }
+            return true;
+        }
 
         if (clickInPanel(click, true)) {
             int index = rowIndex(click, true);

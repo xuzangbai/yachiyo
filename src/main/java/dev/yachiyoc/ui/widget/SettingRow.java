@@ -1,6 +1,7 @@
 package dev.yachiyoc.ui.widget;
 
 import dev.yachiyoc.YachiyoC;
+import dev.yachiyoc.module.Module;
 import dev.yachiyoc.module.setting.BindSetting;
 import dev.yachiyoc.module.setting.BoolSetting;
 import dev.yachiyoc.module.setting.ButtonSetting;
@@ -22,11 +23,14 @@ import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.Click;
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.input.KeyInput;
+import net.minecraft.client.util.InputUtil;
 import net.minecraft.text.Text;
 import org.lwjgl.glfw.GLFW;
 
 public final class SettingRow {
+    private final Module module;
     private final Setting<?> setting;
+    private final boolean bindable;
     private final Anim boolAnim;
     private final Anim hover = new Anim(0.0F, 110L, Easing.OUT_CUBIC);
     private final Anim resetHover = new Anim(0.0F, 100L, Easing.OUT_CUBIC);
@@ -34,9 +38,13 @@ public final class SettingRow {
     private float y;
     private float width;
     private boolean dragging;
+    /** 正在等用户按键给这个设置绑定。 */
+    private boolean binding;
 
-    public SettingRow(Setting<?> setting) {
+    public SettingRow(Module module, Setting<?> setting) {
+        this.module = module;
         this.setting = setting;
+        this.bindable = module != null && Module.bindable(setting);
         this.boolAnim = new Anim(setting instanceof BoolSetting bool && bool.get() ? 1.0F : 0.0F,
                 150L, Easing.OUT_CUBIC);
     }
@@ -89,6 +97,7 @@ public final class SettingRow {
                 : (int) Math.max(10.0F, editBoxX - x - 12.0F);
         Text label = Text2D.trim(setting.label(), labelWidth);
         Text2D.draw(ctx, label, x + 8.0F, y + 7.0F, Theme.TEXT_DIM, false);
+        renderBindChip(ctx, label, accent);
 
         if (setting instanceof BoolSetting bool) {
             float trackX = x + width - 54.0F;
@@ -223,11 +232,20 @@ public final class SettingRow {
         if (!visible() || !contains(click.x(), click.y())) {
             return false;
         }
+        // 右键：给这个功能单独绑一个键（再按 ESC 清空）
+        if (click.button() == 1 && bindable) {
+            binding = true;
+            return true;
+        }
         if (click.button() == 0 && !(setting instanceof ButtonSetting)) {
             float resetX = x + width - 18.0F;
             if (click.x() >= resetX && click.x() <= resetX + 14
                     && click.y() >= y + 5.0F && click.y() <= y + 19.0F) {
                 setting.reset();
+                if (bindable) {
+                    // 重置也把功能级按键一起清掉
+                    module.setBind(setting, -1);
+                }
                 refresh();
                 YachiyoC.config().save();
                 return true;
@@ -284,6 +302,12 @@ public final class SettingRow {
     }
 
     public boolean keyPressed(KeyInput input) {
+        if (binding) {
+            module.setBind(setting, input.key() == GLFW.GLFW_KEY_ESCAPE ? -1 : input.key());
+            binding = false;
+            YachiyoC.config().save();
+            return true;
+        }
         if (setting instanceof BindSetting bind && bind.listening()) {
             bind.setKey(input.key() == GLFW.GLFW_KEY_ESCAPE ? -1 : input.key());
             return true;
@@ -292,9 +316,36 @@ public final class SettingRow {
     }
 
     public void cancelListening() {
+        binding = false;
         if (setting instanceof BindSetting bind) {
             bind.cancelListening();
         }
+    }
+
+    /** 功能级按键的小标签：`切锤 [V]`；绑定中显示 `...`，没绑就不画。 */
+    private void renderBindChip(DrawContext ctx, Text label, int accent) {
+        if (!bindable) {
+            return;
+        }
+        int key = module.bindOf(setting);
+        if (!binding && key <= 0) {
+            return;
+        }
+        Text chipText = Text.literal(binding ? "..." : keyName(key));
+        float chipW = Text2D.width(chipText) + 8.0F;
+        float chipX = x + 8.0F + Text2D.width(label) + 6.0F;
+        float limit = x + width - (setting instanceof BoolSetting ? 58.0F : 92.0F);
+        if (chipX + chipW > limit) {
+            return;
+        }
+        Render2D.roundedRect(ctx, chipX, y + 6.0F, chipW, 13.0F, 4.0F,
+                binding ? Render2D.withAlpha(accent, 0.35F) : Theme.FIELD);
+        Text2D.drawCentered(ctx, chipText, chipX + chipW / 2.0F, y + 8.0F,
+                binding ? Theme.TEXT : Theme.TEXT_MUTED, false);
+    }
+
+    private static String keyName(int key) {
+        return InputUtil.Type.KEYSYM.createFromCode(key).getLocalizedText().getString();
     }
 
     public boolean mouseDragged(Click click, double deltaX, double deltaY) {

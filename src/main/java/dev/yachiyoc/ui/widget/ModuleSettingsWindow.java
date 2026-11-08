@@ -47,7 +47,7 @@ public final class ModuleSettingsWindow {
         this.x = x;
         this.y = y;
         for (Setting<?> setting : module.settings()) {
-            rows.add(new SettingRow(setting));
+            rows.add(new SettingRow(module, setting));
         }
     }
 
@@ -263,6 +263,10 @@ public final class ModuleSettingsWindow {
     private void resetAll() {
         for (Setting<?> setting : module.settings()) {
             setting.reset();
+        }
+        // 一键重置也把功能级按键清掉（先拷贝一份 key，避免边遍历边删）
+        for (String settingId : new ArrayList<>(module.settingBinds().keySet())) {
+            module.setBindById(settingId, -1);
         }
         for (SettingRow row : rows) {
             row.refresh();

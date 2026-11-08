@@ -143,6 +143,8 @@
   "selector.yachiyoc.entity": "Select Entities",
   "selector.yachiyoc.search": "Search...",
   "selector.yachiyoc.hint": "Left: available · Right: selected · Click a row to toggle",
+  "selector.yachiyoc.select_all": "Select all",
+  "selector.yachiyoc.clear_all": "Clear all",
   "selector.yachiyoc.available": "Available (%s)",
   "selector.yachiyoc.selected": "Selected (%s)",
   "selector.yachiyoc.empty_available": "Nothing available",
@@ -225,7 +227,7 @@
   "setting.yachiyoc.aura.weapon_type.value.trident": "Trident",
   "setting.yachiyoc.aura.weapon_type.value.any": "Any Weapon",
   "setting.yachiyoc.aura.switch_mode": "Switch Mode",
-  "setting.yachiyoc.aura.switch_mode.description": "Silent: hand unchanged, only the server holds the weapon for the hit. Per Attack: switch and keep. Swap Back: keep it until no target is left.",
+  "setting.yachiyoc.aura.switch_mode.description": "Silent: hand unchanged, only the server holds the weapon for the hit. Per Attack: switch and leave it there (no switch back). Swap Back: keep it until no target is left.",
   "setting.yachiyoc.aura.switch_mode.value.silent": "Silent",
   "setting.yachiyoc.aura.switch_mode.value.per_attack": "Per Attack",
   "setting.yachiyoc.aura.switch_mode.value.swap_back": "Swap Back",
@@ -243,6 +245,8 @@
   "setting.yachiyoc.aura.mace_spoof.description": "Sends fake fall packets before each hit so you get the full smash bonus while standing. Only for singleplayer / servers without anticheat.",
   "setting.yachiyoc.aura.mace_spoof_height": "Spoof Height",
   "setting.yachiyoc.aura.mace_spoof_height.description": "Faked fall distance in blocks (default 25). Higher hits harder but is far more likely to be set back or kicked.",
+  "setting.yachiyoc.aura.mace_silent": "Silent Mace Swap",
+  "setting.yachiyoc.aura.mace_silent.description": "Always swap the mace in silently (swap in -> hit -> swap back in one tick), regardless of Switch Mode.",
   "setting.yachiyoc.client.config.rotation_mode.value.silent_movement": "Silent Movement",
   "setting.yachiyoc.client.trigger.value.hold_toggle": "Hold Toggle"
 }

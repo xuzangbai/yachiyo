@@ -6,6 +6,9 @@ import dev.yachiyoc.hud.HudManager;
 import dev.yachiyoc.module.Module;
 import dev.yachiyoc.module.ModuleRegistry;
 import dev.yachiyoc.module.TriggerMode;
+import dev.yachiyoc.module.setting.BoolSetting;
+import dev.yachiyoc.module.setting.EnumSetting;
+import dev.yachiyoc.module.setting.Setting;
 import dev.yachiyoc.platform.Chat;
 import dev.yachiyoc.platform.Keybinds;
 import dev.yachiyoc.ui.ClickGuiScreen;
@@ -137,7 +140,78 @@ public final class YachiyoC implements ClientModInitializer {
                 }
             }
             KEY_STATE.put(module.id(), down);
+            pollSettingKeys(client, module);
         }
+    }
+
+    /**
+     * 模块内单个功能的按键（和模块键完全独立）：
+     * 一个键可以同时绑到多个功能上，按下去各自切一次，不做冲突检查。
+     */
+    private static void pollSettingKeys(MinecraftClient client, Module module) {
+        for (Setting<?> setting : module.settings()) {
+            if (!Module.bindable(setting)) {
+                continue;
+            }
+            int key = module.bindOf(setting);
+            if (key <= 0) {
+                continue;
+            }
+            String stateKey = module.id() + "#" + setting.id();
+            boolean wasDown = KEY_STATE.getOrDefault(stateKey, false);
+            boolean down = InputUtil.isKeyPressed(client.getWindow(), key);
+            if (down && !wasDown) {
+                toggleSetting(module, setting);
+            }
+            KEY_STATE.put(stateKey, down);
+        }
+    }
+
+    /** 切换模块里的一个功能（不动模块开关），并在聊天栏报一行。 */
+    private static void toggleSetting(Module module, Setting<?> setting) {
+        if (setting instanceof BoolSetting bool) {
+            bool.set(!bool.get());
+            notifySetting(module, setting,
+                    Text.literal(bool.get() ? " + " : " - ")
+                            .withColor(bool.get() ? Chat.enabledColor() : Chat.disabledColor()),
+                    Text.translatable(bool.get()
+                            ? "command.yachiyoc.state.on"
+                            : "command.yachiyoc.state.off"));
+        } else if (setting instanceof EnumSetting<?> enumSetting) {
+            cycleEnum(enumSetting);
+            notifySetting(module, setting,
+                    Chat.name(Text.literal(" = ")),
+                    Text.literal(enumSetting.displayValue()));
+        }
+        config.save();
+    }
+
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    private static void cycleEnum(EnumSetting<?> setting) {
+        ((EnumSetting) setting).cycle();
+    }
+
+    /**
+     * {@code [YachiyoC] + 杀戮光环 <切锤 + 开> 已开启}
+     *
+     * <p>开头的 +/- 和结尾的状态是**整个模块**的（和原来的模块提示一致），
+     * 尖括号里是这次被切换的功能名 + 它的新状态。
+     */
+    private static void notifySetting(Module module, Setting<?> setting, Text sign, Text state) {
+        boolean moduleOn = module.enabled();
+        Text line = Chat.prefix()
+                .append(Text.literal(moduleOn ? "+ " : "- ")
+                        .withColor(moduleOn ? Chat.enabledColor() : Chat.disabledColor()))
+                .append(Chat.name(module.name()))
+                .append(Text.literal(" <"))
+                .append(setting.label())
+                .append(sign)
+                .append(state)
+                .append(Text.literal("> "))
+                .append(Chat.status(moduleOn, Text.translatable(moduleOn
+                        ? "module.yachiyoc.toggle.on"
+                        : "module.yachiyoc.toggle.off")));
+        Chat.replaceRaw("setting_toggle:" + module.id() + ":" + setting.id(), line);
     }
 
     public static void toggleModuleFromGui(Module module) {

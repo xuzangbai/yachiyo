@@ -1,13 +1,16 @@
 package dev.yachiyoc.module;
 
 import dev.yachiyoc.module.setting.BindSetting;
+import dev.yachiyoc.module.setting.BoolSetting;
 import dev.yachiyoc.module.setting.EnumSetting;
 import dev.yachiyoc.module.setting.Setting;
 import net.minecraft.text.Text;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 
 /**
@@ -21,6 +24,8 @@ public abstract class Module {
     private final boolean implemented;
     private final boolean toggleable;
     private final List<Setting<?>> settings = new ArrayList<>();
+    /** 模块内单个功能（设置项）的按键：settingId -> VK 码。 */
+    private final Map<String, Integer> settingBinds = new LinkedHashMap<>();
     private boolean enabled;
 
     public final BindSetting bind = add(new BindSetting("client", "bind", -1));
@@ -82,6 +87,33 @@ public abstract class Module {
 
     public List<Setting<?>> settings() {
         return Collections.unmodifiableList(settings);
+    }
+
+    /** 只有开关类和枚举类设置值得绑键（数字/文本/列表按一下没有明确语义）。 */
+    public static boolean bindable(Setting<?> setting) {
+        return setting instanceof BoolSetting || setting instanceof EnumSetting<?>;
+    }
+
+    /** 这个设置单独绑的键；-1 = 没绑。 */
+    public int bindOf(Setting<?> setting) {
+        return settingBinds.getOrDefault(setting.id(), -1);
+    }
+
+    public void setBind(Setting<?> setting, int keyCode) {
+        setBindById(setting.id(), keyCode);
+    }
+
+    public void setBindById(String settingId, int keyCode) {
+        if (keyCode <= 0) {
+            settingBinds.remove(settingId);
+        } else {
+            settingBinds.put(settingId, keyCode);
+        }
+    }
+
+    /** 只读视图，给存档用。 */
+    public Map<String, Integer> settingBinds() {
+        return Collections.unmodifiableMap(settingBinds);
     }
 
     public Text name() {
