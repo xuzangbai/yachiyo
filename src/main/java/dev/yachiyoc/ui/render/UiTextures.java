@@ -57,6 +57,15 @@ public final class UiTextures {
         }
     }
 
+    /**
+     * 神龟图标：直接从 jar / 输出目录里读 PNG 再注册成动态纹理。
+     *
+     * <p>不走资源包的 {@code yachiyoc:textures/...} 查询 —— 那条路在开发环境里会因为
+     * 资源包快照时机不对而报 "Missing resource"，自己读流最稳。
+     */
+    public static Identifier turtleIcon(String name) {
+        return load("turtle_" + name, "/assets/yachiyoc/textures/images/turtles/" + name + ".png");
+    }
     private static Identifier load(String key, String path) {
         Identifier existing = CACHE.get(key);
         if (existing != null) {

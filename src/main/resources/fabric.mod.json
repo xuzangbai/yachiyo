@@ -15,6 +15,7 @@
       "dev.yachiyoc.YachiyoC"
     ]
   },
+  "accessWidener": "yachiyoc.accesswidener",
   "mixins": [
     "yachiyoc.mixins.json"
   ],

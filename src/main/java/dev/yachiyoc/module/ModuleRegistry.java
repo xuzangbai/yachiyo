@@ -8,6 +8,7 @@ import dev.yachiyoc.module.impl.client.Config;
 import dev.yachiyoc.module.impl.combat.Aura;
 import dev.yachiyoc.module.impl.misc.Example;
 import dev.yachiyoc.module.impl.misc.ViaFix;
+import dev.yachiyoc.module.impl.render.NameTags;
 import dev.yachiyoc.module.setting.Setting;
 
 import java.util.ArrayList;
@@ -32,7 +33,7 @@ public final class ModuleRegistry {
         register(new StubModule("sprint", ModuleCategory.MOVEMENT));
         register(new StubModule("autotool", ModuleCategory.PLAYER));
         register(new StubModule("scaffold", ModuleCategory.WORLD));
-        register(new StubModule("hud", ModuleCategory.RENDER));
+        register(new NameTags());
         register(new StubModule("toolbox", ModuleCategory.TOOLS));
         register(new Config());
         register(new Colors());

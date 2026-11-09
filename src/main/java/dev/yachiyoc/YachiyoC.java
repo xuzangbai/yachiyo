@@ -85,6 +85,7 @@ public final class YachiyoC implements ClientModInitializer {
         HudManager.load(config.data());
         HudElementRegistry.addLast(Identifier.of("yachiyoc", "hud"),
                 (context, tickCounter) -> HudManager.render(context));
+        dev.yachiyoc.render.WorldRenderHook.register();
 
         commands = new CommandManager();
         commands.bootstrap();

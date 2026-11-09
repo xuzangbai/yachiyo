@@ -23,6 +23,7 @@ dependencies {
 }
 
 loom {
+    accessWidenerPath = file("src/main/resources/yachiyoc.accesswidener")
     runs {
         client {
             client()

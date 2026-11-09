@@ -16,7 +16,9 @@
     "ItemModelManagerMixin",
     "LancingMixin",
     "MinecraftClientMixin",
-    "ScreenHandlerAccessor"
+    "ScreenHandlerAccessor",
+    "EntityRendererMixin",
+    "ParticleManagerMixin"
   ],
   "injectors": {
     "defaultRequire": 1

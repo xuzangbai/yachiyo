@@ -1,0 +1,4 @@
+accessWidener v2 named
+
+# 玩家身上"效果粒子"的元数据（服务端会随实体追踪下发，效果包被剥时也还在）
+accessible field net/minecraft/entity/LivingEntity POTION_SWIRLS Lnet/minecraft/entity/data/TrackedData;
