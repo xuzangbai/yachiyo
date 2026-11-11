@@ -52,6 +52,12 @@ public final class Aura extends Module {
             "aura", "targets", RegistryKind.ENTITY_TARGET, DEFAULT_TARGETS));
     private final BoolSetting throughWalls =
             add(new BoolSetting("aura", "through_walls", false));
+    /**
+     * Grim 眼高判定：开 = 按它可能假设的三只候选眼（1.62 / 1.27 / 0.4）各算一遍取最优；
+     * 关 = 只认真实眼高，瞄准方向和距离门限一起退回单眼口径。
+     */
+    private final BoolSetting grimEyeHeight =
+            add(new BoolSetting("aura", "grim_eye_height", true));
     private final EnumSetting<RotationChoice> rotation = add(new EnumSetting<>(
             "aura", "rotation", RotationChoice.class, RotationChoice.FOLLOW));
     /** 0 = 跟随武器冷却；>0 = 固定间隔（毫秒）。 */
@@ -97,6 +103,8 @@ public final class Aura extends Module {
                 "setting.yachiyoc.aura.targets.description"));
         rotation.description(() -> net.minecraft.text.Text.translatable(
                 "setting.yachiyoc.aura.rotation.description"));
+        grimEyeHeight.description(() -> net.minecraft.text.Text.translatable(
+                "setting.yachiyoc.aura.grim_eye_height.description"));
         attackDelay.description(() -> net.minecraft.text.Text.translatable(
                 "setting.yachiyoc.aura.attack_delay.description"));
         autoSwap.description(() -> net.minecraft.text.Text.translatable(
@@ -169,7 +177,7 @@ public final class Aura extends Module {
         }
         Entity target = TargetSelector.findBest(client, player,
                 new TargetSelector.Filter(range.get(), Set.copyOf(targets.selected()),
-                        throughWalls.get(), false));
+                        throughWalls.get(), false, grimEyeHeight.get()));
         if (target == null) {
             RotationManager.clearAim();
             logNearestDistances(client, player);
@@ -207,9 +215,15 @@ public final class Aura extends Module {
         Box box = GrimReach.withHistory(targetBox, target.getVelocity());
         // 逐候选眼高（1.62 / 1.27 / 0.4）各算一套方向，取入射距离最短的那一组。
         // 目标是"我们在高处、目标在低处"时，0.4 那只眼能比 1.62 少算 0.5 格以上。
-        GrimReach.Aim aim = GrimReach.bestAim(feet, box, range.get());
+        // 关掉「Grim 眼高」就只传真实眼高 —— 方向从真实眼算、距离也只按真实眼量，退回单眼口径。
+        double[] eyes = grimEyeHeight.get()
+                ? GrimReach.GRIM_EYES
+                : new double[]{player.getEyeHeight(player.getPose())};
+        GrimReach.Aim aim = GrimReach.bestAim(feet, box, range.get(), eyes);
         if (aim == null) {
-            logGate("wait — 三只候选眼都打不进箱子（会吃 Hitboxes）");
+            logGate(grimEyeHeight.get()
+                    ? "wait — 三只候选眼都打不进箱子（会吃 Hitboxes）"
+                    : "wait — 真实眼打不进箱子（会吃 Hitboxes）");
             return;
         }
         float[] angles = RotationManager.anglesTo(aim.dir().x, aim.dir().y, aim.dir().z);
@@ -220,9 +234,10 @@ public final class Aura extends Module {
         // 门限按 range 整打（SLM 的 combat.att-range 默认 0 = 按 3.0 整打，一点不扣），
         // 只留 0.01 吸收 yaw/pitch 的浮点量化。
         if (!(aim.distance() <= range.get() - GrimReach.MARGIN)) {
-            logGate("wait — grimReach=%.3f (limit %.3f, eye=%.2f, yaw=%.1f pitch=%.1f, deferred=%s)",
+            logGate("wait — grimReach=%.3f (limit %.3f, eye=%.2f, eyes=%s, yaw=%.1f pitch=%.1f, deferred=%s)",
                     aim.distance(), range.get() - GrimReach.MARGIN,
-                    aim.eyeHeight(), angles[0], angles[1], deferredAttack);
+                    aim.eyeHeight(), grimEyeHeight.get() ? "grim" : "single",
+                    angles[0], angles[1], deferredAttack);
             return;
         }
         RotationManager.run(rotationMode, angles[0], angles[1], () -> {

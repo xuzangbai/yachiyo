@@ -48,8 +48,13 @@ public final class GrimReach {
      */
     public static final double MARGIN = 0.01D;
 
-    /** {@code GrimPlayer.possibleEyeHeights[0]}：站立 / 潜行 / 滑翔三套候选眼高。 */
-    private static final double[] EYES = {1.62D, 1.27D, 0.4D};
+    /**
+     * {@code GrimPlayer.possibleEyeHeights[0]}：站立 / 潜行 / 滑翔三套候选眼高。
+     *
+     * <p>Grim 是"每只眼各做一条射线，再取最小"。不想要这份容错时，调用方传一个只含真实眼高的
+     * 数组即可（见 {@code Aura#grimEyeHeight} 开关），瞄准和距离会一起退回单眼口径。
+     */
+    public static final double[] GRIM_EYES = {1.62D, 1.27D, 0.4D};
 
     private static final double EPS = 1.0E-8D;
 
@@ -148,9 +153,19 @@ public final class GrimReach {
      * @return {@code null} 表示三只眼睛都打不进箱子（Grim 会走 {@code Hitboxes}，此时不要出刀）
      */
     public static Aim bestAim(Vec3d feet, Box box, double range) {
+        return bestAim(feet, box, range, GRIM_EYES);
+    }
+
+    /**
+     * 同上，但"有哪些候选眼高"由调用方决定。
+     *
+     * @param eyeHeights {@link #GRIM_EYES} = 三只眼一起判；长度 1 的数组 = 只按那一只眼判（瞄准与距离同时）
+     */
+    public static Aim bestAim(Vec3d feet, Box box, double range, double[] eyeHeights) {
         Box expanded = box.expand(BOX_EXPAND);
+        double[] eyes = eyeHeights == null || eyeHeights.length == 0 ? GRIM_EYES : eyeHeights;
         Aim best = null;
-        for (double eyeHeight : EYES) {
+        for (double eyeHeight : eyes) {
             Vec3d eye = new Vec3d(feet.x, feet.y + eyeHeight, feet.z);
             Vec3d dir = directionFor(eye, expanded, range);
             double distance = entry(eye, dir, expanded, RAY_LENGTH);
@@ -194,9 +209,15 @@ public final class GrimReach {
      * @return {@code Double.MAX_VALUE} 表示这个方向从三只眼睛都打不进箱子
      */
     public static double minDistance(Vec3d feet, Vec3d dir, Box box) {
+        return minDistance(feet, dir, box, GRIM_EYES);
+    }
+
+    /** 同上，候选眼高由调用方给（长度 1 的数组 = 单眼口径）。 */
+    public static double minDistance(Vec3d feet, Vec3d dir, Box box, double[] eyeHeights) {
         Box expanded = box.expand(BOX_EXPAND);
+        double[] eyes = eyeHeights == null || eyeHeights.length == 0 ? GRIM_EYES : eyeHeights;
         double best = Double.MAX_VALUE;
-        for (double eyeHeight : EYES) {
+        for (double eyeHeight : eyes) {
             double t = entry(new Vec3d(feet.x, feet.y + eyeHeight, feet.z), dir, expanded, RAY_LENGTH);
             if (Double.isNaN(t)) {
                 continue;

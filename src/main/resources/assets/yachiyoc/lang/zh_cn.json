@@ -221,6 +221,8 @@
   "setting.yachiyoc.aura.mobs": "攻击怪物",
   "setting.yachiyoc.aura.animals": "攻击动物",
   "setting.yachiyoc.aura.through_walls": "穿墙攻击",
+  "setting.yachiyoc.aura.grim_eye_height": "Grim 眼高判定",
+  "setting.yachiyoc.aura.grim_eye_height.description": "按 Grim 可能假设的三只候选眼高（1.62 / 1.27 / 0.4）判定射程。关闭后瞄准方向和距离门限都只按真实眼高算。",
   "setting.yachiyoc.aura.rotation": "旋转模式",
   "setting.yachiyoc.aura.rotation.value.follow": "跟随客户端",
   "setting.yachiyoc.aura.rotation.value.none": "无",

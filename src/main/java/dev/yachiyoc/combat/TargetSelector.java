@@ -37,7 +37,11 @@ public final class TargetSelector {
     private TargetSelector() {
     }
 
-    public record Filter(double range, Set<String> entityIds, boolean throughWalls, boolean livingOnly) {
+    /**
+     * @param grimEyeHeight 是否按 Grim 的三只候选眼高判定（关掉 = 只认真实眼高，和瞄准/出手门限保持一致）
+     */
+    public record Filter(double range, Set<String> entityIds, boolean throughWalls, boolean livingOnly,
+                         boolean grimEyeHeight) {
     }
 
     public static Entity findBest(MinecraftClient client, ClientPlayerEntity player, Filter filter) {
@@ -48,23 +52,31 @@ public final class TargetSelector {
                 player.getBoundingBox().expand(filter.range()),
                 entity -> valid(player, entity, filter));
         return targets.stream()
-                .min(Comparator.comparingDouble(entity -> nearest(player, entity)))
+                .min(Comparator.comparingDouble(entity -> nearest(player, entity, filter.grimEyeHeight())))
                 .orElse(null);
     }
 
     /**
      * 候选眼高里离实体碰撞箱最近的那个距离 —— 选目标 / 判定射程都用它。
      *
-     * @see #eyeHeights(ClientPlayerEntity)
+     * @see #eyeHeights(ClientPlayerEntity, boolean)
      */
     public static double nearest(ClientPlayerEntity player, Entity entity) {
-        return nearest(player, entity.getBoundingBox());
+        return nearest(player, entity, true);
+    }
+
+    public static double nearest(ClientPlayerEntity player, Entity entity, boolean expandEyes) {
+        return nearest(player, entity.getBoundingBox(), expandEyes);
     }
 
     public static double nearest(ClientPlayerEntity player, Box box) {
+        return nearest(player, box, true);
+    }
+
+    public static double nearest(ClientPlayerEntity player, Box box, boolean expandEyes) {
         Vec3d feet = player.getEntityPos();
         double best = Double.MAX_VALUE;
-        for (double height : eyeHeights(player)) {
+        for (double height : eyeHeights(player, expandEyes)) {
             double distance = Math.sqrt(box.squaredMagnitude(feet.add(0.0D, height, 0.0D)));
             if (distance < best) {
                 best = distance;
@@ -73,8 +85,17 @@ public final class TargetSelector {
         return best;
     }
 
-    /** 1.62 / 1.27 / 0.4（× 玩家 scale）+ 站立眼高 + 当前姿势眼高（潜行 1.27、游泳 0.4 …）。 */
-    private static double[] eyeHeights(ClientPlayerEntity player) {
+    /**
+     * 候选眼高。
+     *
+     * @param expand {@code true}：1.62 / 1.27 / 0.4（× 玩家 scale）+ 站立眼高 + 当前姿势眼高
+     *               （潜行 1.27、游泳 0.4 …），和 Grim 的 {@code getPossibleEyeHeights()} 对齐；
+     *               {@code false}：只有真实眼高，退回单眼口径
+     */
+    private static double[] eyeHeights(ClientPlayerEntity player, boolean expand) {
+        if (!expand) {
+            return new double[]{player.getEyeHeight(player.getPose())};
+        }
         double[] base = player.isGliding() || player.isSwimming() || player.isUsingRiptide()
                 ? GLIDING_EYES
                 : STANDING_EYES;
@@ -129,7 +150,7 @@ public final class TargetSelector {
         if (!filter.entityIds().contains(id)) {
             return false;
         }
-        if (nearest(player, entity) > filter.range()) {
+        if (nearest(player, entity, filter.grimEyeHeight()) > filter.range()) {
             return false;
         }
         return filter.throughWalls() || player.canSee(entity);

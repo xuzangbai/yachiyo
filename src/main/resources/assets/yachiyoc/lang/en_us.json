@@ -221,6 +221,8 @@
   "setting.yachiyoc.aura.mobs": "Mobs",
   "setting.yachiyoc.aura.animals": "Animals",
   "setting.yachiyoc.aura.through_walls": "Through Walls",
+  "setting.yachiyoc.aura.grim_eye_height": "Grim Eye Heights",
+  "setting.yachiyoc.aura.grim_eye_height.description": "Check reach against all three candidate eye heights Grim may assume (1.62 / 1.27 / 0.4). Off = aim and distance both use the real eye height only.",
   "setting.yachiyoc.aura.rotation": "Rotation",
   "setting.yachiyoc.aura.rotation.value.follow": "Follow Client",
   "setting.yachiyoc.aura.rotation.value.none": "None",
