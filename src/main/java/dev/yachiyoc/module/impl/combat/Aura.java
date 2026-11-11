@@ -2,6 +2,7 @@ package dev.yachiyoc.module.impl.combat;
 
 import dev.yachiyoc.combat.AttackScheduler;
 import dev.yachiyoc.combat.GhostHand;
+import dev.yachiyoc.combat.GrimReach;
 import dev.yachiyoc.combat.TargetSelector;
 import dev.yachiyoc.combat.WeaponCategory;
 import dev.yachiyoc.combat.WeaponSwitchMode;
@@ -23,6 +24,7 @@ import net.minecraft.client.network.ClientPlayerEntity;
 import net.minecraft.component.DataComponentTypes;
 import net.minecraft.entity.Entity;
 import net.minecraft.item.ItemStack;
+import net.minecraft.util.math.Box;
 import net.minecraft.util.math.Vec3d;
 
 import java.util.List;
@@ -170,12 +172,15 @@ public final class Aura extends Module {
                         throughWalls.get(), false));
         if (target == null) {
             RotationManager.clearAim();
+            logNearestDistances(client, player);
             // 没有目标了才把手切回去（“攻击后切回”模式的语义：范围里还有人就一直拿着刀）
             if (swap) {
                 GhostHand.release(player);
             }
             return;
         }
+        Debug.logThrottled("aura", 2000L, "target %s %s (range %.2f)",
+                target.getType(), TargetSelector.describeDistances(player, target), range.get());
         // 切锤：满足条件时这一 tick 用锤，否则用配置的武器种类
         WeaponCategory category = maceMode(player) ? WeaponCategory.MACE : weaponType.get();
         // 切锤固定走静默换手（换上去 → 打 → 同一 tick 换回），不受“切换模式”影响
@@ -185,15 +190,47 @@ public final class Aura extends Module {
             GhostHand.hold(player, category, swapInventory.get(), true);
         }
 
-        Vec3d eye = player.getEyePos();
-        Vec3d point = target.getBoundingBox().getCenter();
-        float[] angles = RotationManager.anglesTo(point.x - eye.x, point.y - eye.y, point.z - eye.z);
+        RotationMode rotationMode = RotationManager.resolve(rotation.get());
+        // 这两档是"本 tick 把角度写进实体、下一 tick 才出刀"：出刀那一刻你的脚底已经又走了一 tick，
+        // 垂直速度（跳/落）动辄 0.4~1.5 格，比水平 0.28 大得多 —— 高低差对拼时 Reach 就是这么爆的。
+        // 所以按"下一 tick 的位置"来量、来瞄。
+        boolean deferredAttack = rotationMode == RotationMode.SILENT_MOVEMENT
+                || rotationMode == RotationMode.DELAY_MOVEMENT;
+        Vec3d feet = deferredAttack ? player.getEntityPos().add(player.getVelocity()) : player.getEntityPos();
+        // 量距离 / 选方向都用「插值并集」箱：Grim 量的是 getPossibleHitboxCombined()，
+        // 覆盖目标上一 tick 的位置。垂直位移最大（跳/落 0.4~1.5 格一 tick），
+        // 高低差对拼时差的就是这一段 —— 不并进来，门限会平白保守一截。
+        Box targetBox = target.getBoundingBox();
+        if (deferredAttack) {
+            targetBox = targetBox.offset(target.getVelocity());
+        }
+        Box box = GrimReach.withHistory(targetBox, target.getVelocity());
+        // 逐候选眼高（1.62 / 1.27 / 0.4）各算一套方向，取入射距离最短的那一组。
+        // 目标是"我们在高处、目标在低处"时，0.4 那只眼能比 1.62 少算 0.5 格以上。
+        GrimReach.Aim aim = GrimReach.bestAim(feet, box, range.get());
+        if (aim == null) {
+            logGate("wait — 三只候选眼都打不进箱子（会吃 Hitboxes）");
+            return;
+        }
+        float[] angles = RotationManager.anglesTo(aim.dir().x, aim.dir().y, aim.dir().z);
         double delay = attackDelay.get();
         if (!cooldownReady(player, delay)) {
             return;
         }
-        RotationMode rotationMode = RotationManager.resolve(rotation.get());
+        // 门限按 range 整打（SLM 的 combat.att-range 默认 0 = 按 3.0 整打，一点不扣），
+        // 只留 0.01 吸收 yaw/pitch 的浮点量化。
+        if (!(aim.distance() <= range.get() - GrimReach.MARGIN)) {
+            logGate("wait — grimReach=%.3f (limit %.3f, eye=%.2f, yaw=%.1f pitch=%.1f, deferred=%s)",
+                    aim.distance(), range.get() - GrimReach.MARGIN,
+                    aim.eyeHeight(), angles[0], angles[1], deferredAttack);
+            return;
+        }
         RotationManager.run(rotationMode, angles[0], angles[1], () -> {
+            // 出手前先把「位置 + 瞄准角」立刻发给服务端，再出刀。
+            // SLM 的 LegacySnapRotManager#snapAt、Hachimi 的 MovementTracker#Mj 都是这一步：
+            // 少了它，服务端手里的朝向/位置还是上一 tick 的，判距离时会算大（实测 3.16~3.42），
+            // 于是 Reach 报超距、伤害也被吞。
+            RotationManager.snapAim(player, angles[0], angles[1]);
             if (!swap) {
                 AttackScheduler.attack(client, player, target, delay);
                 return;
@@ -216,6 +253,36 @@ public final class Aura extends Module {
                 }
             }
         });
+    }
+
+    /**
+     * 没选到目标时，把“最近的生物三个口径的距离”打出来（只在 {@code --debug aura true} 时）。
+     *
+     * <p>{@code eye} = 真实眼睛(脚+1.62) → 箱子最近点；{@code bestEye} = 候选眼高里最近的；
+     * {@code boxes} = 两个碰撞箱之间。哪个数超过 {@code 范围}，就是哪个口径在卡我们。
+     */
+    private void logNearestDistances(MinecraftClient client, ClientPlayerEntity player) {
+        if (!Debug.enabled("aura") || client.world == null) {
+            return;
+        }
+        Entity nearest = null;
+        double best = Double.MAX_VALUE;
+        for (Entity entity : client.world.getEntities()) {
+            if (entity == player || entity.isRemoved()
+                    || !(entity instanceof net.minecraft.entity.LivingEntity living)
+                    || living.isDead() || living.getHealth() <= 0.0F) {
+                continue;
+            }
+            double distance = TargetSelector.nearest(player, entity);
+            if (distance < best) {
+                best = distance;
+                nearest = entity;
+            }
+        }
+        if (nearest != null) {
+            Debug.logThrottled("aura", 2000L, "no target — nearest %s %s (range %.2f)",
+                    nearest.getType(), TargetSelector.describeDistances(player, nearest), range.get());
+        }
     }
 
     /**
