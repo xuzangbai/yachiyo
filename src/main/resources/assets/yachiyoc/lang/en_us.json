@@ -223,6 +223,8 @@
   "setting.yachiyoc.aura.through_walls": "Through Walls",
   "setting.yachiyoc.aura.grim_eye_height": "Grim Eye Heights",
   "setting.yachiyoc.aura.grim_eye_height.description": "Check reach against all three candidate eye heights Grim may assume (1.62 / 1.27 / 0.4). Off = aim and distance both use the real eye height only.",
+  "setting.yachiyoc.aura.reach_margin": "Reach Margin",
+  "setting.yachiyoc.aura.reach_margin.description": "Reach margin (blocks)",
   "setting.yachiyoc.aura.target_priority": "Target Priority",
   "setting.yachiyoc.aura.target_priority.description": "Target priority",
   "setting.yachiyoc.aura.target_priority.value.nearest": "Nearest",

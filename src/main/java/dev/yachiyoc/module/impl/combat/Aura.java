@@ -69,6 +69,14 @@ public final class Aura extends Module {
     /** 多目标优先级：离准心最近 / 离自己最近。 */
     private final EnumSetting<TargetPriority> targetPriority =
             add(new EnumSetting<>("aura", "target_priority", TargetPriority.class, TargetPriority.CROSSHAIR));
+    /**
+     * 出手门限的安全余量（格）：门限按 {@code 范围 - 余量} 判。
+     *
+     * <p>Grim 量的是"服务端那份几何"，我们量的是本地推算的，永远会有十几厘米的差；
+     * 0.15 能吃掉大多数情况（SLM 那边等价于 0.09）。贴着火线打就调大，想多要射程就调小。
+     */
+    private final DoubleSetting reachMargin =
+            add(new DoubleSetting("aura", "reach_margin", 0.15, 0.0, 0.5, 0.01));
 
     /** 目标渲染总开关；关掉后一格都不画（设置项还在，随时可以再开）。 */
     private final BoolSetting espEnabled =
@@ -240,6 +248,27 @@ public final class Aura extends Module {
     }
 
     /**
+     * 把「服务端已知位置」的箱子并进来。
+     *
+     * <p>Grim 量距离用的是它手里的目标位置（{@code getPossibleHitboxCombined()}，覆盖旧位置→新位置）；
+     * 客户端屏幕上的位置比服务端新或旧都有可能。两边不一致时就会出现"我们算 2.9、Grim 算 3.4"——
+     * 并集之后我们的口径至少不会比它小，就不会放行它要报的刀。
+     */
+    private static Box serverAwareBox(Box box, Entity target) {
+        Vec3d tracked = target.getTrackedPosition().getPos();
+        if (tracked == null) {
+            return box;
+        }
+        Vec3d delta = tracked.subtract(target.getEntityPos());
+        double lengthSquared = delta.lengthSquared();
+        if (lengthSquared < 1.0E-6D || lengthSquared > 4.0D) {
+            // 位置一致，或者是传送级别的差（含"未知位置 = ZERO"）：不并，免得把方向带歪
+            return box;
+        }
+        return box.union(box.offset(delta));
+    }
+
+    /**
      * 目标渲染：每帧一次，只画当前锁定的目标。
      *
      * <p>箱子必须按 {@code getLerpedPos} 插值，否则实体每 tick 跳一次、框会跟着一跳一跳；
@@ -331,14 +360,16 @@ public final class Aura extends Module {
         boolean deferredAttack = rotationMode == RotationMode.SILENT_MOVEMENT
                 || rotationMode == RotationMode.DELAY_MOVEMENT;
         Vec3d feet = deferredAttack ? player.getEntityPos().add(player.getVelocity()) : player.getEntityPos();
-        // 量距离 / 选方向都用「插值并集」箱：Grim 量的是 getPossibleHitboxCombined()，
-        // 覆盖目标上一 tick 的位置。垂直位移最大（跳/落 0.4~1.5 格一 tick），
-        // 高低差对拼时差的就是这一段 —— 不并进来，门限会平白保守一截。
+        // 量距离 / 选方向都用「和 Grim 同口径」的箱子，三份取并集：
+        //   ① 客户端看到的（插值后）
+        //   ② 服务端已知位置的箱（getTrackedPosition）—— Grim 量距离用的就是它那边的位置
+        //   ③ 上一 tick 的位置（用速度反推）
+        // ②③ 是重点：不并进来，就会出现"我们算 2.9、Grim 算 3.4"——两边用的根本不是同一个箱子。
         Box targetBox = target.getBoundingBox();
         if (deferredAttack) {
             targetBox = targetBox.offset(target.getVelocity());
         }
-        Box box = GrimReach.withHistory(targetBox, target.getVelocity());
+        Box box = serverAwareBox(GrimReach.withHistory(targetBox, target.getVelocity()), target);
         // 逐候选眼高（1.62 / 1.27 / 0.4）各算一套方向，取入射距离最短的那一组。
         // 目标是"我们在高处、目标在低处"时，0.4 那只眼能比 1.62 少算 0.5 格以上。
         // 关掉「Grim 眼高」就只传真实眼高 —— 方向从真实眼算、距离也只按真实眼量，退回单眼口径。
@@ -359,9 +390,9 @@ public final class Aura extends Module {
         }
         // 门限按 range 整打（SLM 的 combat.att-range 默认 0 = 按 3.0 整打，一点不扣），
         // 只留 0.01 吸收 yaw/pitch 的浮点量化。
-        if (!(aim.distance() <= range.get() - GrimReach.MARGIN)) {
+        if (!(aim.distance() <= range.get() - reachMargin.get())) {
             logGate("wait — grimReach=%.3f (limit %.3f, eye=%.2f, eyes=%s, yaw=%.1f pitch=%.1f, deferred=%s)",
-                    aim.distance(), range.get() - GrimReach.MARGIN,
+                    aim.distance(), range.get() - reachMargin.get(),
                     aim.eyeHeight(), grimEyeHeight.get() ? "grim" : "single",
                     angles[0], angles[1], deferredAttack);
             return;
