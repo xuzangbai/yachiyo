@@ -24,11 +24,44 @@ public interface RenderApi {
     /** 一帧结束：把攒下来的顶点提交掉。 */
     void endWorld();
 
+    /**
+     * 打开后，之后画的四边形（{@link #quad} / {@link #ribbon} / {@link #ribbonOnPlane} /
+     * {@link #box} 的面 / {@link #billboardRect}）一律关掉深度测试，也就是<b>穿墙可见</b>。
+     *
+     * <p>默认关。用完记得关回去——它是这一帧的全局状态，留着会把别的模块也一起变成穿墙。
+     * 线（{@link #line}）和文字另有自己的通道：文字用 {@code throughWalls} 参数。
+     */
+    void throughWalls(boolean enabled);
+
+    /** 当前是否处于穿墙模式（只读，给实现层自己判断用）。 */
+    boolean throughWalls();
+
     /** 画一个方框。 */
     void box(Box box, int sideColor, int lineColor, ShapeMode mode);
 
     /** 画一条线。 */
     void line(Vec3d from, Vec3d to, int color, float width);
+
+    /**
+     * 画一条<b>有宽度</b>的线（面向相机的四边形带子）。
+     *
+     * <p>{@link #line} 走 {@code RenderLayers.LINES}，{@code lineWidth} 在核心 profile 上基本被显卡
+     * 忽略（只保证 1px）；要画 2px 以上、或者要 ESP 那种发光边框，都用这个。
+     *
+     * @param width 世界坐标下的宽度（单位是格）；想按"屏幕像素"稳粗细，调用方自己按距离换算
+     */
+    void ribbon(Vec3d from, Vec3d to, float width, int color);
+
+    /**
+     * 画一条<b>躺在指定平面内</b>的有宽度线段（贴面扫描线、方块面上的波带）。
+     *
+     * <p>和 {@link #ribbon} 的区别只在"宽度往哪个方向铺"：这个用的是 {@code 段方向 × 平面法线}，
+     * 所以带子始终贴在面上，不会从地板里立起来一堵墙。贴面绘制记得自己沿着法线偏移一点点
+     * （调用方负责，通常 0.004 格就够），否则会和方块本体打架。
+     *
+     * @param normal 平面法线（要求单位向量、轴对齐）
+     */
+    void ribbonOnPlane(Vec3d from, Vec3d to, float width, Vec3d normal, int color);
 
     /** 画一个四边形（四个角按顺序给）。 */
     void quad(Vec3d a, Vec3d b, Vec3d c, Vec3d d, int color);

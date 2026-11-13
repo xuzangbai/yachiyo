@@ -7,7 +7,6 @@ import net.minecraft.registry.Registries;
 import net.minecraft.util.math.Box;
 import net.minecraft.util.math.Vec3d;
 
-import java.util.Comparator;
 import java.util.List;
 import java.util.Set;
 
@@ -39,9 +38,10 @@ public final class TargetSelector {
 
     /**
      * @param grimEyeHeight 是否按 Grim 的三只候选眼高判定（关掉 = 只认真实眼高，和瞄准/出手门限保持一致）
+     * @param priority      多目标时怎么排：纯距离 / 纯准心
      */
     public record Filter(double range, Set<String> entityIds, boolean throughWalls, boolean livingOnly,
-                         boolean grimEyeHeight) {
+                         boolean grimEyeHeight, TargetPriority priority) {
     }
 
     public static Entity findBest(MinecraftClient client, ClientPlayerEntity player, Filter filter) {
@@ -51,9 +51,87 @@ public final class TargetSelector {
         List<Entity> targets = client.world.getEntitiesByClass(Entity.class,
                 player.getBoundingBox().expand(filter.range()),
                 entity -> valid(player, entity, filter));
-        return targets.stream()
-                .min(Comparator.comparingDouble(entity -> nearest(player, entity, filter.grimEyeHeight())))
-                .orElse(null);
+        if (targets.isEmpty()) {
+            return null;
+        }
+        boolean expandEyes = filter.grimEyeHeight();
+
+        if (filter.priority() != TargetPriority.CROSSHAIR) {
+            // 纯距离
+            Entity nearest = null;
+            double nearestDistance = Double.MAX_VALUE;
+            for (Entity entity : targets) {
+                double distance = nearest(player, entity, expandEyes);
+                if (distance < nearestDistance) {
+                    nearestDistance = distance;
+                    nearest = entity;
+                }
+            }
+            return nearest;
+        }
+
+        // 纯准心：夹角最小的赢；夹角打平（差 < 0.5°）用距离决胜
+        Vec3d eye = player.getEyePos();
+        Vec3d look = player.getRotationVec(1.0F);
+        Entity best = null;
+        double bestAngle = Double.MAX_VALUE;
+        double bestDistance = Double.MAX_VALUE;
+        for (Entity entity : targets) {
+            double angle = crosshairAngle(eye, look, entity.getBoundingBox());
+            double distance = nearest(player, entity, expandEyes);
+            boolean better = best == null
+                    || angle < bestAngle - 0.5D
+                    || (angle <= bestAngle + 0.5D && distance < bestDistance);
+            if (better) {
+                best = entity;
+                bestAngle = angle;
+                bestDistance = distance;
+            }
+        }
+        return best;
+    }
+
+    /**
+     * 准心到目标的"角度距离"（度）——目标身上离准心最近的那一点偏了多少度。
+     *
+     * <ol>
+     *   <li>视线直接穿过碰撞箱 → <b>0°</b>（正中，快路径）；</li>
+     *   <li>否则取碰撞箱的 <b>8 个角 + 中心 + 眼到箱最近点</b>共 10 个点，
+     *       各自算"眼睛→该点"的方向与视线的夹角，取<b>最小</b>的那个。</li>
+     * </ol>
+     *
+     * <p>只取"最近点"一个点是错的：准心没落在任何人身上时，那个点的方向经常歪在侧面，
+     * 会挑中你觉得莫名其妙的目标。按整箱的 8 个角算，才是"哪个人离我的准心最近"。
+     */
+    public static double crosshairAngle(Vec3d eye, Vec3d look, Box box) {
+        if (look == null || look.lengthSquared() < 1.0E-6D) {
+            return 0.0D;
+        }
+        Vec3d dir = look.normalize();
+        if (!Double.isNaN(GrimReach.entry(eye, dir, box, 8.0D))) {
+            return 0.0D;
+        }
+        double best = Double.MAX_VALUE;
+        for (int i = 0; i < 10; i++) {
+            Vec3d point = switch (i) {
+                case 8 -> box.getCenter();
+                case 9 -> GrimReach.closestPoint(eye, box);
+                default -> new Vec3d(
+                        (i & 1) == 0 ? box.minX : box.maxX,
+                        (i & 2) == 0 ? box.minY : box.maxY,
+                        (i & 4) == 0 ? box.minZ : box.maxZ);
+            };
+            Vec3d to = point.subtract(eye);
+            if (to.lengthSquared() < 1.0E-6D) {
+                return 0.0D;
+            }
+            double cos = dir.dotProduct(to.normalize());
+            double angle = Math.toDegrees(Math.acos(Math.max(-1.0D, Math.min(1.0D, cos))));
+            if (angle < best) {
+                best = angle;
+            }
+        }
+        return best;
     }
 
     /**

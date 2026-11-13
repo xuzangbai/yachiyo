@@ -1,9 +1,12 @@
 package dev.yachiyoc.render.v1_21_11;
 
+import com.mojang.blaze3d.pipeline.RenderPipeline;
+import com.mojang.blaze3d.platform.DepthTestFunction;
 import dev.yachiyoc.render.RenderApi;
 import dev.yachiyoc.render.ShapeMode;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.font.TextRenderer;
+import net.minecraft.client.gl.RenderPipelines;
 import net.minecraft.client.render.Camera;
 import net.minecraft.client.render.command.BatchingRenderCommandQueue;
 import net.minecraft.client.render.command.ItemCommandRenderer;
@@ -15,6 +18,7 @@ import net.minecraft.client.render.OutlineVertexConsumerProvider;
 import org.joml.Vector3f;import net.minecraft.client.render.OverlayTexture;
 import net.minecraft.client.render.RenderLayer;
 import net.minecraft.client.render.RenderLayers;
+import net.minecraft.client.render.RenderSetup;
 import net.minecraft.client.render.VertexConsumer;
 import net.minecraft.client.render.VertexConsumerProvider;
 import net.minecraft.client.util.math.MatrixStack;
@@ -32,11 +36,34 @@ import org.joml.Vector4f;
  * （2D 那边对应的是 {@code Render2D} / {@code Text2D}）。
  *
  * <p>几何走原版提供的层（{@code RenderLayers.LINES} / {@code debugQuads()}），文字走
- * {@code TextRenderer#draw}，两者都不自己写管线；以后要穿墙线框再补自己的 RenderLayer。
+ * {@code TextRenderer#draw}；穿墙另有一条自己注册的 {@code position_color} 管线
+ * （{@link #THROUGH_WALL_QUADS}），由 {@link #throughWalls(boolean)} 切换。
  */
 public final class RenderApiImpl implements RenderApi {
     private static final MinecraftClient MC = MinecraftClient.getInstance();
     private static final int FULL_LIGHT = 0x00F000F0;
+
+    /**
+     * 穿墙用的层：和 {@code debugQuads} 同一个 {@code position_color} 着色器与顶点格式，
+     * 只把深度测试关掉。
+     *
+     * <p>两个坑（照 SLM 的 {@code Render_v1_21_11} 抄的）：
+     * <ol>
+     *   <li>管线必须走 {@link RenderPipelines#register}，没注册的管线不会编译着色器，画出来是空的；</li>
+     *   <li>必须基于 {@link RenderPipelines#POSITION_COLOR_SNIPPET} 建，那个 snippet 里带着
+     *       变换/投影 uniform 和顶点格式，从零 build 出来的管线即使编译过也没有矩阵，一样看不见。</li>
+     * </ol>
+     */
+    private static final RenderPipeline THROUGH_WALL_PIPELINE =
+            RenderPipelines.register(RenderPipeline.builder(RenderPipelines.POSITION_COLOR_SNIPPET)
+                    .withLocation(Identifier.of("yachiyoc", "pipeline/esp_through_walls"))
+                    .withDepthTestFunction(DepthTestFunction.NO_DEPTH_TEST)
+                    .withCull(false)
+                    .build());
+
+    private static final RenderLayer THROUGH_WALL_QUADS = RenderLayer.of(
+            "yachiyoc:esp_through_walls",
+            RenderSetup.builder(THROUGH_WALL_PIPELINE).translucent().build());
 
     private static final OrderedRenderCommandQueueImpl ITEM_QUEUE = new OrderedRenderCommandQueueImpl();
     private static final ItemCommandRenderer ITEM_RENDERER = new ItemCommandRenderer();
@@ -46,6 +73,22 @@ public final class RenderApiImpl implements RenderApi {
     private Matrix4f projection;
     private float tickDelta;
     private boolean inWorld;
+    private boolean throughWalls;
+
+    @Override
+    public void throughWalls(boolean enabled) {
+        this.throughWalls = enabled;
+    }
+
+    @Override
+    public boolean throughWalls() {
+        return throughWalls;
+    }
+
+    /** 画四边形时该用哪一层：穿墙模式换掉深度测试，其余完全一样。 */
+    private RenderLayer quads() {
+        return throughWalls ? THROUGH_WALL_QUADS : RenderLayers.debugQuads();
+    }
 
     @Override
     public void beginWorld(MatrixStack matrices, VertexConsumerProvider consumers, Matrix4f projection,
@@ -126,11 +169,57 @@ public final class RenderApiImpl implements RenderApi {
     }
 
     @Override
+    public void ribbon(Vec3d from, Vec3d to, float width, int color) {
+        if (!inWorld || width <= 0.0F) {
+            return;
+        }
+        Vec3d forward = to.subtract(from);
+        double length = forward.length();
+        if (length < 1.0E-5D) {
+            return;
+        }
+        Vec3d dir = forward.multiply(1.0D / length);
+        // 面向相机的方向 = 段方向 × 到相机的方向；两者平行时（正对着看）退化，那就换一个轴向
+        Vec3d side = dir.crossProduct(cameraPos().subtract(from));
+        if (side.lengthSquared() < 1.0E-10D) {
+            side = dir.crossProduct(new Vec3d(0.0D, 1.0D, 0.0D));
+        }
+        if (side.lengthSquared() < 1.0E-10D) {
+            return;
+        }
+        side = side.normalize().multiply(width * 0.5D);
+        strip(from, to, side, color);
+    }
+
+    /** 以 {@code side}（半宽向量）为宽度方向，把一段线画成一个四边形。 */
+    private void strip(Vec3d from, Vec3d to, Vec3d side, int color) {
+        quad(from.add(side), from.subtract(side), to.subtract(side), to.add(side), color);
+    }
+
+    @Override
+    public void ribbonOnPlane(Vec3d from, Vec3d to, float width, Vec3d normal, int color) {
+        if (!inWorld || width <= 0.0F || normal == null) {
+            return;
+        }
+        Vec3d forward = to.subtract(from);
+        double length = forward.length();
+        if (length < 1.0E-5D) {
+            return;
+        }
+        // 宽度沿"段方向 × 法线"铺，这样带子始终躺在平面内
+        Vec3d side = forward.multiply(1.0D / length).crossProduct(normal);
+        if (side.lengthSquared() < 1.0E-10D) {
+            return;
+        }
+        strip(from, to, side.normalize().multiply(width * 0.5D), color);
+    }
+
+    @Override
     public void quad(Vec3d a, Vec3d b, Vec3d c, Vec3d d, int color) {
         if (!inWorld) {
             return;
         }
-        VertexConsumer buffer = consumers.getBuffer(RenderLayers.debugQuads());
+        VertexConsumer buffer = consumers.getBuffer(quads());
         Matrix4f matrix = matrices.peek().getPositionMatrix();
         Vec3d cam = cameraPos();
         vertex(buffer, matrix, cam, a, color);
@@ -229,7 +318,7 @@ public final class RenderApiImpl implements RenderApi {
             return;
         }
         Matrix4f matrix = worldBillboard(center);
-        VertexConsumer buffer = consumers.getBuffer(RenderLayers.debugQuads());
+        VertexConsumer buffer = consumers.getBuffer(quads());
         float halfW = width / 2.0F;
         float halfH = height / 2.0F;
         buffer.vertex(matrix, -halfW, -halfH, 0.0F).color(color);
@@ -290,7 +379,7 @@ public final class RenderApiImpl implements RenderApi {
     }
 
     private void sides(Box box, int color) {
-        VertexConsumer buffer = consumers.getBuffer(RenderLayers.debugQuads());
+        VertexConsumer buffer = consumers.getBuffer(quads());
         Matrix4f matrix = matrices.peek().getPositionMatrix();
         Vec3d cam = cameraPos();
         double x1 = box.minX;

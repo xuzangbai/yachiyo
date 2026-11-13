@@ -3,18 +3,26 @@ package dev.yachiyoc.module.impl.combat;
 import dev.yachiyoc.combat.AttackScheduler;
 import dev.yachiyoc.combat.GhostHand;
 import dev.yachiyoc.combat.GrimReach;
+import dev.yachiyoc.combat.TargetPriority;
 import dev.yachiyoc.combat.TargetSelector;
 import dev.yachiyoc.combat.WeaponCategory;
 import dev.yachiyoc.combat.WeaponSwitchMode;
 import dev.yachiyoc.module.Module;
 import dev.yachiyoc.module.ModuleCategory;
 import dev.yachiyoc.module.setting.BoolSetting;
+import dev.yachiyoc.module.setting.ColorSetting;
 import dev.yachiyoc.module.setting.DoubleSetting;
 import dev.yachiyoc.module.setting.EnumSetting;
 import dev.yachiyoc.module.setting.RegistryListSetting;
 import dev.yachiyoc.net.ServerMovementState;
 import dev.yachiyoc.platform.Debug;
 import dev.yachiyoc.platform.RegistryKind;
+import dev.yachiyoc.render.Render;
+import dev.yachiyoc.render.Render3DCallbacks;
+import dev.yachiyoc.render.RenderApi;
+import dev.yachiyoc.render.esp.EspMode;
+import dev.yachiyoc.render.esp.EspRenderer;
+import dev.yachiyoc.render.esp.EspStyle;
 import dev.yachiyoc.rotation.RotationChoice;
 import dev.yachiyoc.rotation.RotationManager;
 import dev.yachiyoc.rotation.RotationMode;
@@ -58,6 +66,58 @@ public final class Aura extends Module {
      */
     private final BoolSetting grimEyeHeight =
             add(new BoolSetting("aura", "grim_eye_height", true));
+    /** 多目标优先级：离准心最近 / 离自己最近。 */
+    private final EnumSetting<TargetPriority> targetPriority =
+            add(new EnumSetting<>("aura", "target_priority", TargetPriority.class, TargetPriority.CROSSHAIR));
+
+    /** 目标渲染总开关；关掉后一格都不画（设置项还在，随时可以再开）。 */
+    private final BoolSetting espEnabled =
+            add(new BoolSetting("aura", "esp_enabled", true));
+    /** 渲染风格：声纳扫描 / 光环（加新风格只动 EspMode + EspRenderer）。 */
+    private final EnumSetting<EspMode> espStyle =
+            add(new EnumSetting<>("aura", "esp_style", EspMode.class, EspMode.HALO));
+    /** 声纳波颜色，alpha 就是最亮那一下的透明度。 */
+    private final ColorSetting espSonarColor =
+            add(new ColorSetting("aura", "esp_sonar_color", 0xCCFF2A2A));
+    /** 光环颜色，alpha 就是最亮那一下的透明度。 */
+    private final ColorSetting espHaloColor =
+            add(new ColorSetting("aura", "esp_halo_color", 0xD9C9A0FF));
+    /** 线 / 环粗细，单位≈"4 格处的一个像素"（渲染时按到相机的距离等比放大，远处不会细成头发）。 */
+    private final DoubleSetting espThickness =
+            add(new DoubleSetting("aura", "esp_thickness", 2.5, 0.5, 6.0, 0.5));
+    /** 声纳波最大半径（格）。 */
+    private final DoubleSetting espSonarRadius =
+            add(new DoubleSetting("aura", "esp_sonar_radius", 2.0, 0.5, 4.0, 0.1));
+    /** 一次 ping 的周期（秒）：前 78% 从中心往外推，推到头之后整张网淡掉再重来。 */
+    private final DoubleSetting espSonarPeriod =
+            add(new DoubleSetting("aura", "esp_sonar_period", 1.6, 0.8, 3.0, 0.1));
+    /** 同心圈的环距（格）：0.4 配 2 格半径 = 5 圈。 */
+    private final DoubleSetting espSonarSpacing =
+            add(new DoubleSetting("aura", "esp_sonar_spacing", 0.4, 0.15, 1.0, 0.05));
+    /** 辐条数量：从中心发散，各自角度/长度都带手绘式抖动。 */
+    private final DoubleSetting espSonarSpokes =
+            add(new DoubleSetting("aura", "esp_sonar_spokes", 8.0, 3.0, 24.0, 1.0));
+    /** 光环上下行程，占目标身高一半的比例（1 = 顶到头顶 / 脚底）。 */
+    private final DoubleSetting espHaloAmplitude =
+            add(new DoubleSetting("aura", "esp_halo_amplitude", 0.6, 0.0, 1.0, 0.05));
+    /** 光环拖尾层数（0 = 无拖尾）。 */
+    private final DoubleSetting espHaloTrail =
+            add(new DoubleSetting("aura", "esp_halo_trail", 5.0, 0.0, 8.0, 1.0));
+
+    /** 渲染层要画的目标：每 tick 由光环更新，关模块 / 没目标时清空。 */
+    private Entity espTarget;
+    /**
+     * 世界渲染回调。
+     *
+     * <p>两个坑都在这一个字段上：
+     * <ol>
+     *   <li>必须存成字段：{@code this::renderEsp} 每次都生成新对象，用方法引用注册再用方法引用退订是退不掉的；</li>
+     *   <li>在构造里注册，而不是 {@code onEnable}：{@code ModuleRegistry#load} 恢复配置走的是
+     *       {@code setEnabled(enabled, false)}，**不会触发 onEnable**，配置里开着模块时渲染回调就永远挂不上。
+     *       回调内部本来就有 {@code enabled()} 判断，常驻注册是空转一行代码。</li>
+     * </ol>
+     */
+    private final Runnable espRenderTask = this::renderEsp;
     private final EnumSetting<RotationChoice> rotation = add(new EnumSetting<>(
             "aura", "rotation", RotationChoice.class, RotationChoice.FOLLOW));
     /** 0 = 跟随武器冷却；>0 = 固定间隔（毫秒）。 */
@@ -138,18 +198,79 @@ public final class Aura extends Module {
         maceSpoof.visibleWhen(() -> autoSwap.get() && maceSwap.get());
         maceSilent.visibleWhen(() -> autoSwap.get() && maceSwap.get());
         maceSpoofHeight.visibleWhen(() -> autoSwap.get() && maceSwap.get() && maceSpoof.get());
+        maceSpoofHeight.description(() -> net.minecraft.text.Text.translatable(
+                "setting.yachiyoc.aura.mace_spoof_height.description"));
+        espStyle.description(() -> net.minecraft.text.Text.translatable(
+                "setting.yachiyoc.aura.esp_style.description"));
+        espEnabled.description(() -> net.minecraft.text.Text.translatable(
+                "setting.yachiyoc.aura.esp_enabled.description"));
+        espSonarRadius.description(() -> net.minecraft.text.Text.translatable(
+                "setting.yachiyoc.aura.esp_sonar_radius.description"));
+        espHaloAmplitude.description(() -> net.minecraft.text.Text.translatable(
+                "setting.yachiyoc.aura.esp_halo_amplitude.description"));
+        espThickness.description(() -> net.minecraft.text.Text.translatable(
+                "setting.yachiyoc.aura.esp_thickness.description"));
+        // 总开关关掉时整组收起；各自再只在对应风格下露出来
+        espStyle.visibleWhen(espEnabled::get);
+        espThickness.visibleWhen(espEnabled::get);
+        espSonarColor.visibleWhen(() -> espEnabled.get() && espStyle.get() == EspMode.SONAR);
+        espSonarRadius.visibleWhen(() -> espEnabled.get() && espStyle.get() == EspMode.SONAR);
+        espSonarPeriod.visibleWhen(() -> espEnabled.get() && espStyle.get() == EspMode.SONAR);
+        espSonarSpacing.visibleWhen(() -> espEnabled.get() && espStyle.get() == EspMode.SONAR);
+        espSonarSpokes.visibleWhen(() -> espEnabled.get() && espStyle.get() == EspMode.SONAR);
+        espHaloColor.visibleWhen(() -> espEnabled.get() && espStyle.get() == EspMode.HALO);
+        espHaloAmplitude.visibleWhen(() -> espEnabled.get() && espStyle.get() == EspMode.HALO);
+        espHaloTrail.visibleWhen(() -> espEnabled.get() && espStyle.get() == EspMode.HALO);
         RotationManager.initialize();
         ClientTickEvents.START_CLIENT_TICK.register(this::tick);
+        // 常驻注册（不挂在 onEnable 上，理由见 espRenderTask 的注释）
+        Render3DCallbacks.register(espRenderTask);
     }
 
     @Override
     public void onDisable() {
+        espTarget = null;
         RotationManager.clearAim();
         ClientPlayerEntity player = MinecraftClient.getInstance().player;
         if (player != null) {
             // 只“申请收刀”：静默切刀的那把刀由 GhostHand 在 tick 末尾自己点回背包，
             // 这里不能 forget()，否则刀就永远留在手上了。
             GhostHand.release(player);
+        }
+    }
+
+    /**
+     * 目标渲染：每帧一次，只画当前锁定的目标。
+     *
+     * <p>箱子必须按 {@code getLerpedPos} 插值，否则实体每 tick 跳一次、框会跟着一跳一跳；
+     * 具体画法全在 {@link EspRenderer}，这里只负责把设置拼成 {@link EspStyle}。
+     */
+    private void renderEsp() {
+        Entity target = espTarget;
+        if (target == null || target.isRemoved() || !enabled() || !espEnabled.get()) {
+            return;
+        }
+        RenderApi api = Render.api();
+        if (!api.inWorld()) {
+            return;
+        }
+        Vec3d lerped = target.getLerpedPos(api.tickDelta());
+        Box box = target.getBoundingBox().offset(lerped.subtract(target.getEntityPos()));
+        // 渲染本身就是穿墙的（目标被方块挡住也要能看见），画完立刻关回去，别把别的模块也带成穿墙
+        api.throughWalls(true);
+        try {
+            EspRenderer.render(espStyle.get(), box, new EspStyle(
+                    espSonarColor.get(),
+                    espHaloColor.get(),
+                    espThickness.get().floatValue(),
+                    espSonarRadius.get().floatValue(),
+                    espSonarPeriod.get().floatValue(),
+                    espSonarSpacing.get().floatValue(),
+                    (int) Math.round(espSonarSpokes.get()),
+                    espHaloAmplitude.get().floatValue(),
+                    (int) Math.round(espHaloTrail.get())));
+        } finally {
+            api.throughWalls(false);
         }
     }
 
@@ -172,14 +293,17 @@ public final class Aura extends Module {
             // 也不动玩家的手（这里刻意不 release：快捷栏换手的收尾会把选中格拨回去，
             // 那样会把正在吃的食物换掉，等于打断进食）。
             RotationManager.clearAim();
+            espTarget = null;
             logGate("paused (eating)");
             return;
         }
         Entity target = TargetSelector.findBest(client, player,
                 new TargetSelector.Filter(range.get(), Set.copyOf(targets.selected()),
-                        throughWalls.get(), false, grimEyeHeight.get()));
+                        throughWalls.get(), false, grimEyeHeight.get(),
+                        targetPriority.get()));
         if (target == null) {
             RotationManager.clearAim();
+            espTarget = null;
             logNearestDistances(client, player);
             // 没有目标了才把手切回去（“攻击后切回”模式的语义：范围里还有人就一直拿着刀）
             if (swap) {
@@ -187,6 +311,8 @@ public final class Aura extends Module {
             }
             return;
         }
+        // 渲染层画的就是这一个（换目标时框会直接跟过去）
+        espTarget = target;
         Debug.logThrottled("aura", 2000L, "target %s %s (range %.2f)",
                 target.getType(), TargetSelector.describeDistances(player, target), range.get());
         // 切锤：满足条件时这一 tick 用锤，否则用配置的武器种类
