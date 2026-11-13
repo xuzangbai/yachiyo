@@ -248,6 +248,21 @@ public final class Aura extends Module {
     }
 
     /**
+     * 两份候选瞄准里取"距离更大的"那份 —— 门限要按最坏情况算。
+     *
+     * <p>任一份打不进箱子（{@code null}）就用另一份；两份都打不进才返回 {@code null}。
+     */
+    private static GrimReach.Aim worse(GrimReach.Aim a, GrimReach.Aim b) {
+        if (a == null) {
+            return b;
+        }
+        if (b == null) {
+            return a;
+        }
+        return a.distance() >= b.distance() ? a : b;
+    }
+
+    /**
      * 把「服务端已知位置」的箱子并进来。
      *
      * <p>Grim 量距离用的是它手里的目标位置（{@code getPossibleHitboxCombined()}，覆盖旧位置→新位置）；
@@ -372,14 +387,24 @@ public final class Aura extends Module {
         if (deferredAttack) {
             targetBox = targetBox.offset(target.getVelocity());
         }
-        Box box = serverAwareBox(targetBox, target);
+        // 两份箱子，取"更差的（距离更大的）"那份当门限：
+        //   ① 现在的位置（客户端箱 ∪ 服务端已知位置箱）
+        //   ② 目标下一 tick 的位置（按它当前速度外推）
+        //
+        // 为什么要有 ②：客户端看到的目标位置永远滞后一个 tick ——
+        //   · 目标**靠近**时，我们手里的位置比真实更远 → 量出来偏大 → 本来就保守，②不会更差；
+        //   · 目标**后退**时，我们手里的位置比真实更近 → 量出来偏小 → 被放行，然后 Grim 按
+        //     "又走远了一 tick"的箱子报出来。把 ② 并进判定，刚好补掉这一 tick。
+        Box boxNow = serverAwareBox(targetBox, target);
+        Box boxNext = boxNow.offset(target.getVelocity());
         // 逐候选眼高（1.62 / 1.27 / 0.4）各算一套方向，取入射距离最短的那一组。
         // 目标是"我们在高处、目标在低处"时，0.4 那只眼能比 1.62 少算 0.5 格以上。
         // 关掉「Grim 眼高」就只传真实眼高 —— 方向从真实眼算、距离也只按真实眼量，退回单眼口径。
         double[] eyes = grimEyeHeight.get()
                 ? GrimReach.GRIM_EYES
                 : new double[]{player.getEyeHeight(player.getPose())};
-        GrimReach.Aim aim = GrimReach.bestAim(feet, box, range.get(), eyes);
+        GrimReach.Aim aim = worse(GrimReach.bestAim(feet, boxNow, range.get(), eyes),
+                GrimReach.bestAim(feet, boxNext, range.get(), eyes));
         if (aim == null) {
             logGate(grimEyeHeight.get()
                     ? "wait — 三只候选眼都打不进箱子（会吃 Hitboxes）"
