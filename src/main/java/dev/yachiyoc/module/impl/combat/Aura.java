@@ -360,16 +360,19 @@ public final class Aura extends Module {
         boolean deferredAttack = rotationMode == RotationMode.SILENT_MOVEMENT
                 || rotationMode == RotationMode.DELAY_MOVEMENT;
         Vec3d feet = deferredAttack ? player.getEntityPos().add(player.getVelocity()) : player.getEntityPos();
-        // 量距离 / 选方向都用「和 Grim 同口径」的箱子，三份取并集：
+        // 量距离 / 选方向都用「和 Grim 同口径」的箱子：
         //   ① 客户端看到的（插值后）
         //   ② 服务端已知位置的箱（getTrackedPosition）—— Grim 量距离用的就是它那边的位置
-        //   ③ 上一 tick 的位置（用速度反推）
-        // ②③ 是重点：不并进来，就会出现"我们算 2.9、Grim 算 3.4"——两边用的根本不是同一个箱子。
+        //
+        // 不再用 withHistory 按"目标速度"把上一 tick 位置并进来：那是个**单向放宽**——
+        // Grim 的插值并集 3 步就收敛了，而客户端手里的 getVelocity()（击退/跳跃后）会保留很久，
+        // 结果是"我们的箱子比它宽 0.4~0.6"，第一刀就被放行、然后被它按真实箱子报出来。
+        // ② 只会让箱子变小/变远（更严），不会再犯这个错。
         Box targetBox = target.getBoundingBox();
         if (deferredAttack) {
             targetBox = targetBox.offset(target.getVelocity());
         }
-        Box box = serverAwareBox(GrimReach.withHistory(targetBox, target.getVelocity()), target);
+        Box box = serverAwareBox(targetBox, target);
         // 逐候选眼高（1.62 / 1.27 / 0.4）各算一套方向，取入射距离最短的那一组。
         // 目标是"我们在高处、目标在低处"时，0.4 那只眼能比 1.62 少算 0.5 格以上。
         // 关掉「Grim 眼高」就只传真实眼高 —— 方向从真实眼算、距离也只按真实眼量，退回单眼口径。
@@ -398,31 +401,38 @@ public final class Aura extends Module {
             return;
         }
         RotationManager.run(rotationMode, angles[0], angles[1], () -> {
-            // 出手前先把「位置 + 瞄准角」立刻发给服务端，再出刀。
-            // SLM 的 LegacySnapRotManager#snapAt、Hachimi 的 MovementTracker#Mj 都是这一步：
-            // 少了它，服务端手里的朝向/位置还是上一 tick 的，判距离时会算大（实测 3.16~3.42），
-            // 于是 Reach 报超距、伤害也被吞。
-            RotationManager.snapAim(player, angles[0], angles[1]);
-            if (!swap) {
-                AttackScheduler.attack(client, player, target, delay);
-                return;
-            }
-            if (silentMace) {
-                attackSilent(client, player, target, category);
-                return;
-            }
-            switch (mode) {
-                case SILENT -> attackSilent(client, player, target, category);
-                case PER_ATTACK -> {
-                    // 每次攻击切换：只负责切过去，之后不管换回原快捷栏
-                    GhostHand.hold(player, category, swapInventory.get(), false);
-                    applyMaceSpoof(player, category);
-                    AttackScheduler.attackNow(client, player, target);
+            try {
+                // 出手前先把「位置 + 瞄准角」立刻发给服务端，再出刀。
+                // SLM 的 LegacySnapRotManager#snapAt、Hachimi 的 MovementTracker#Mj 都是这一步：
+                // 少了它，服务端手里的朝向/位置还是上一 tick 的，判距离时会算大（实测 3.16~3.42），
+                // 于是 Reach 报超距、伤害也被吞。
+                RotationManager.snapAim(player, angles[0], angles[1]);
+                if (!swap) {
+                    AttackScheduler.attack(client, player, target, delay);
+                    return;
                 }
-                case SWAP_BACK -> {
-                    applyMaceSpoof(player, category);
-                    AttackScheduler.attackNow(client, player, target);
+                if (silentMace) {
+                    attackSilent(client, player, target, category);
+                    return;
                 }
+                switch (mode) {
+                    case SILENT -> attackSilent(client, player, target, category);
+                    case PER_ATTACK -> {
+                        // 每次攻击切换：只负责切过去，之后不管换回原快捷栏
+                        GhostHand.hold(player, category, swapInventory.get(), false);
+                        applyMaceSpoof(player, category);
+                        AttackScheduler.attackNow(client, player, target);
+                    }
+                    case SWAP_BACK -> {
+                        applyMaceSpoof(player, category);
+                        AttackScheduler.attackNow(client, player, target);
+                    }
+                }
+            } finally {
+                // 出刀后无条件再补一包瞄准角：它是"攻击后第一个 update 包"，
+                // 保证 Grim 那三个候选朝向全都是瞄准角，不会退化成用相机角量距离
+                // （站着不动 + 相机正好等于瞄准角时，原版一个朝向包都不发，就会出这种偏差）。
+                RotationManager.snapAfterAttack(player, angles[0], angles[1]);
             }
         });
     }

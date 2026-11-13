@@ -202,6 +202,31 @@ public final class RotationManager {
     }
 
     /**
+     * 出刀之后<b>无条件</b>补一包「服务端位置 + 瞄准角」。
+     *
+     * <p>Grim 的 Reach 检查挂在"攻击之后第一个移动/转向包"上，候选朝向是
+     * {@code (当前角, lastYaw+当前pitch, lastYaw+lastPitch)}。如果那一包迟迟不来
+     * （站着不动、相机又正好等于瞄准角时，原版一个朝向包都不发，只发 OnGroundOnly），
+     * 检查会被拖到后面，那时瞄准角已经掉出候选窗口 —— 它就拿相机角去量距离，
+     * 偏十几度就能把 2.85 量成 3.0x，也就是那种"刚超一点"的报警。
+     *
+     * <p>所以出刀后立刻补这一包：它就是"攻击后的第一个 update 包"，且当前角就是瞄准角，
+     * 三个候选全是瞄准角，量出来的必然是我们门限里算的那个数。
+     */
+    public static void snapAfterAttack(ClientPlayerEntity player, float yaw, float pitch) {
+        if (player == null || player.networkHandler == null) {
+            return;
+        }
+        ServerMovementState.ensure(player);
+        float safePitch = MathHelper.clamp(pitch, -90.0F, 90.0F);
+        // 和 snapAim 一样：yaw 以服务端已有的角为基准做连续性，避免 ±360 的跳变
+        float safeYaw = ServerMovementState.yaw() + MathHelper.wrapDegrees(yaw - ServerMovementState.yaw());
+        player.networkHandler.sendPacket(new PlayerMoveC2SPacket.Full(
+                ServerMovementState.x(), ServerMovementState.y(), ServerMovementState.z(),
+                safeYaw, safePitch, ServerMovementState.onGround(), player.horizontalCollision));
+    }
+
+    /**
      * Called at the head of {@code ClientPlayerEntity#sendMovementPackets}.
      *
      * <p>Vanilla decides "do I have to send a rotation" by comparing the entity rotation with
