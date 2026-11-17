@@ -3,6 +3,8 @@ package dev.yachiyoc.module.impl.client;
 import dev.yachiyoc.module.Module;
 import dev.yachiyoc.module.ModuleCategory;
 import dev.yachiyoc.module.setting.ColorSetting;
+import dev.yachiyoc.module.setting.BoolSetting;
+import dev.yachiyoc.module.setting.DoubleSetting;
 import dev.yachiyoc.module.setting.EnumSetting;
 import dev.yachiyoc.module.setting.FontSetting;
 import dev.yachiyoc.module.setting.StringSetting;
@@ -10,6 +12,7 @@ import dev.yachiyoc.platform.Chat;
 import dev.yachiyoc.rotation.RotationManager;
 import dev.yachiyoc.rotation.RotationMode;
 import dev.yachiyoc.ui.render.Text2D;
+import dev.yachiyoc.ui.UiStyle;
 import net.minecraft.text.Text;
 
 /**
@@ -17,6 +20,10 @@ import net.minecraft.text.Text;
  * toggle capsule and opens the floating settings window.
  */
 public final class Config extends Module {
+    public final BoolSetting smoothMotion = add(new BoolSetting("client.config", "smooth_motion", true));
+    public final BoolSetting liquidGlass = add(new BoolSetting("client.config", "liquid_glass", true));
+    public final DoubleSetting glassStrength = add(new DoubleSetting(
+            "client.config", "glass_strength", 0.65, 0.1, 1.0, 0.05));
     public final EnumSetting<RotationMode> rotationMode = add(new EnumSetting<>(
             "client.config", "rotation_mode", RotationMode.class,
             RotationMode.SILENT_MOVEMENT, RotationManager::setDefaultMode));
@@ -34,6 +41,14 @@ public final class Config extends Module {
 
     public Config() {
         super("config", ModuleCategory.CLIENT, true, false);
+        UiStyle.configure(smoothMotion, liquidGlass, glassStrength);
+        glassStrength.visibleWhen(liquidGlass::get);
+        group("appearance", smoothMotion, liquidGlass, glassStrength, font);
+        group("chat", displayPrefix, prefixColor, moduleNameColor, enabledColor, disabledColor);
+        group("rotation", rotationMode);
+        smoothMotion.description(() -> Text.translatable("setting.yachiyoc.client.config.smooth_motion.description"));
+        liquidGlass.description(() -> Text.translatable("setting.yachiyoc.client.config.liquid_glass.description"));
+        glassStrength.description(() -> Text.translatable("setting.yachiyoc.client.config.glass_strength.description"));
         RotationManager.setDefaultMode(rotationMode.get());
         rotationMode.description(() -> Text.translatable("setting.yachiyoc.client.config.rotation_mode.description"));
         font.description(() -> Text.translatable("setting.yachiyoc.client.config.font.description",

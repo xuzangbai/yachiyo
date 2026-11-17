@@ -18,6 +18,10 @@ public final class ExpandAnimation {
     }
 
     public void update(float deltaSeconds) {
+        if (!dev.yachiyoc.ui.UiStyle.animationsEnabled()) {
+            progress = target;
+            return;
+        }
         float delta = Math.min(Math.max(deltaSeconds, 0.0F), 0.1F);
         float factor = 1.0F - (float) Math.exp(-12.0F * delta);
         progress += (target - progress) * factor;

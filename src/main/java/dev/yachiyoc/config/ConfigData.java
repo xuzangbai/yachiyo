@@ -14,6 +14,11 @@ import java.util.Set;
 public final class ConfigData {
     public String prefix = "--";
     public int openKey = 265; // GLFW_KEY_UP
+    /** Normalized ClickGUI position; negative means centered. */
+    public float guiX = -1.0F;
+    public float guiY = -1.0F;
+    public float guiWidth = 760.0F;
+    public float guiHeight = 440.0F;
     /** auto | en_us | zh_cn */
     public String language = "zh_cn";
     /** --debug 开着的功能名，默认空（全关）。 */

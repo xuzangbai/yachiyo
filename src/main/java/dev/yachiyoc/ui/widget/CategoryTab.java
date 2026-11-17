@@ -57,7 +57,7 @@ public final class CategoryTab {
         hover.set(hovered ? 1.0F : 0.0F);
         float activeAmount = activeAnim.value();
 
-        int base = hovered ? Theme.STATE_LAYER_STRONG : Theme.STATE_LAYER;
+        int base = Render2D.mix(Theme.STATE_LAYER, Theme.STATE_LAYER_STRONG, hover.value());
         Render2D.roundedRect(ctx, x, y, width, height, Theme.SMALL_RADIUS, base);
         if (activeAmount > 0.01F) {
             Render2D.roundedRect(ctx, x, y, width, height, Theme.SMALL_RADIUS,
@@ -66,7 +66,7 @@ public final class CategoryTab {
                     1.5F, Render2D.withAlpha(accent, 0.95F * activeAmount));
         }
 
-        int textColor = activeAmount > 0.5F ? Theme.TEXT : Theme.TEXT_DIM;
+        int textColor = Render2D.mix(Theme.TEXT_DIM, Theme.TEXT, activeAmount);
         Text2D.draw(ctx, category.label(), x + 15.0F, y + (height - Text2D.height()) / 2.0F + 1.0F,
                 textColor, false);
         Text2D.drawRight(ctx, Text.literal(String.valueOf(count)), x + width - 11.0F,

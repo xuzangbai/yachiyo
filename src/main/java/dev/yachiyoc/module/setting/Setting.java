@@ -21,6 +21,7 @@ public abstract class Setting<T> {
     private final T defaultValue;
     protected T value;
     private BooleanSupplier visible = () -> true;
+    private String group = "general";
     private Supplier<Text> description =
             () -> Text.translatable("ui.yachiyoc.no_description");
 
@@ -37,6 +38,14 @@ public abstract class Setting<T> {
 
     public String id() {
         return id;
+    }
+
+    public String group() {
+        return group;
+    }
+
+    public void group(String group) {
+        this.group = Objects.requireNonNull(group);
     }
 
     public T get() {

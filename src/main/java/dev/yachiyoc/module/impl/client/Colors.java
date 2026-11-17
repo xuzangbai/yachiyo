@@ -41,5 +41,9 @@ public final class Colors extends Module {
 
     public Colors() {
         super("colors", ModuleCategory.CLIENT, true, false);
+        group("surfaces", window, sidebar, content, card, cardHover, cardActive);
+        group("text", text, textDim, textMuted);
+        group("accents", accent, trackOn, wip);
+        group("borders", windowBorder, cardBorder);
     }
 }

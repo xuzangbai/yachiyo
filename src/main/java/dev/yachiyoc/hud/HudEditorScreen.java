@@ -131,7 +131,7 @@ public final class HudEditorScreen extends Screen {
             y = height - h - 8.0F;
         }
 
-        Render2D.roundedBox(context, x, y, CONFIG_WIDTH, h, 10.0F, Theme.CARD_BORDER, Theme.WINDOW);
+        Render2D.floatingSurface(context, x, y, CONFIG_WIDTH, h, 10.0F, Theme.CARD_BORDER, Theme.WINDOW, mouseX, mouseY);
         context.enableScissor((int) x, (int) y, (int) (x + CONFIG_WIDTH), (int) (y + h));
         Text2D.draw(context, Text.translatable("hud.yachiyoc.config"), x + 10.0F, y + 7.0F,
                 Theme.TEXT_DIM, false);
@@ -249,7 +249,7 @@ public final class HudEditorScreen extends Screen {
         float x = clamp(menuX, 8.0F, width - w - 8.0F);
         float y = clamp(menuY, 8.0F, height - h - 8.0F);
 
-        Render2D.roundedBox(context, x, y, w, h, 10.0F, Theme.CARD_BORDER, Theme.WINDOW);
+        Render2D.floatingSurface(context, x, y, w, h, 10.0F, Theme.CARD_BORDER, Theme.WINDOW, mouseX, mouseY);
         Text2D.draw(context, Text.translatable("hud.yachiyoc.add"), x + 10.0F, y + 9.0F,
                 Theme.TEXT_DIM, false);
 
@@ -288,8 +288,8 @@ public final class HudEditorScreen extends Screen {
         panelX = clamp(panelX, 8.0F, width - panelWidth - 8.0F);
         panelY = clamp(panelY, 8.0F, height - panelHeight - 8.0F);
 
-        Render2D.roundedBox(context, panelX, panelY, panelWidth, panelHeight, 10.0F,
-                Theme.CARD_BORDER, Theme.WINDOW);
+        Render2D.floatingSurface(context, panelX, panelY, panelWidth, panelHeight, 10.0F,
+                Theme.CARD_BORDER, Theme.WINDOW, mouseX, mouseY);
         Text2D.draw(context, settingsTarget.name(), panelX + 10.0F, panelY + 9.0F,
                 Theme.TEXT, false);
         drawDelete(context, panelX + panelWidth - 56.0F, panelY + 6.0F, mouseX, mouseY);
@@ -531,6 +531,7 @@ public final class HudEditorScreen extends Screen {
 
     @Override
     public boolean keyPressed(KeyInput input) {
+        if (ColorPickerPopup.keyPressed(input)) return true;
         DoubleSetting editingNumber = DoubleSetting.active();
         if (editingNumber != null) {
             if (input.key() == GLFW.GLFW_KEY_ESCAPE) {
@@ -568,6 +569,7 @@ public final class HudEditorScreen extends Screen {
 
     @Override
     public boolean charTyped(CharInput input) {
+        if (ColorPickerPopup.charTyped(input)) return true;
         DoubleSetting editingNumber = DoubleSetting.active();
         if (editingNumber != null) {
             editingNumber.typeChar((char) input.codepoint());
@@ -592,7 +594,9 @@ public final class HudEditorScreen extends Screen {
         SoundSetting.closeOpen();
         StringSetting.stopAllEditing();
         DoubleSetting.stopAllEditing();
-        ColorPickerPopup.close();
+        ColorPickerPopup.dismiss();
+        EnumDropdownPopup.dismiss();
+        FontDropdownPopup.dismiss();
         save();
         super.removed();
     }

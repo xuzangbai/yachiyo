@@ -32,6 +32,7 @@ public final class SettingRow {
     private final Setting<?> setting;
     private final boolean bindable;
     private final Anim boolAnim;
+    private final Anim sliderAnim;
     private final Anim hover = new Anim(0.0F, 110L, Easing.OUT_CUBIC);
     private final Anim resetHover = new Anim(0.0F, 100L, Easing.OUT_CUBIC);
     private float x;
@@ -47,6 +48,8 @@ public final class SettingRow {
         this.bindable = module != null && Module.bindable(setting);
         this.boolAnim = new Anim(setting instanceof BoolSetting bool && bool.get() ? 1.0F : 0.0F,
                 150L, Easing.OUT_CUBIC);
+        this.sliderAnim = new Anim(setting instanceof DoubleSetting number ? (float) number.ratio() : 0,
+                110L, Easing.OUT_CUBIC);
     }
 
     public Setting<?> setting() {
@@ -82,9 +85,8 @@ public final class SettingRow {
             SettingDescriptionOverlay.set(setting.description());
         }
         hover.set(hovered ? 1.0F : 0.0F);
-        if (hovered) {
-            Render2D.roundedRect(ctx, x, y, width, height(), Theme.SMALL_RADIUS - 1.0F, Theme.ROW_HOVER);
-        }
+        Render2D.roundedRect(ctx, x, y, width, height(), Theme.SMALL_RADIUS - 1.0F,
+                Render2D.withAlpha(Theme.ROW_HOVER, hover.value()));
 
         // 编辑中的数值输入框：靠右、不铺满整行（最多 96px），左边照常显示设置名
         DoubleSetting editingSlider = setting instanceof DoubleSetting ds && ds.editing() ? ds : null;
@@ -100,6 +102,7 @@ public final class SettingRow {
         renderBindChip(ctx, label, accent);
 
         if (setting instanceof BoolSetting bool) {
+            boolAnim.set(bool.get() ? 1 : 0);
             float trackX = x + width - 54.0F;
             float trackY = y + 6.0F;
             float t = boolAnim.value();
@@ -140,7 +143,9 @@ public final class SettingRow {
                 float trackY = y + 17.0F;
                 float trackWidth = width - 36.0F;
                 Render2D.roundedRect(ctx, trackX, trackY, trackWidth, 3.0F, 1.5F, Theme.TRACK_OFF);
-                float filled = trackWidth * (float) slider.ratio();
+                if (dragging) sliderAnim.snap((float) slider.ratio());
+                else sliderAnim.set((float) slider.ratio());
+                float filled = trackWidth * sliderAnim.value();
                 if (filled > 0.0F) {
                     Render2D.roundedRect(ctx, trackX, trackY, filled, 3.0F, 1.5F, accent);
                     Render2D.roundedRect(ctx, trackX + filled - 2.5F, trackY - 2.0F, 5.0F, 7.0F, 2.5F, Theme.KNOB);
@@ -261,16 +266,24 @@ public final class SettingRow {
             bool.toggle();
             boolAnim.set(bool.get() ? 1.0F : 0.0F);
         } else if (setting instanceof FontSetting fontSetting) {
+            ColorPickerPopup.close();
+            EnumDropdownPopup.close();
+            SoundSetting.closeOpen();
             MinecraftClient client = MinecraftClient.getInstance();
             FontDropdownPopup.toggle(fontSetting, x + width - 88.0F, y + 19.0F, 160.0F,
                     client.getWindow().getScaledWidth(), client.getWindow().getScaledHeight());
         } else if (setting instanceof EnumSetting<?> enumSetting) {
+            ColorPickerPopup.close();
+            FontDropdownPopup.close();
+            SoundSetting.closeOpen();
             MinecraftClient client = MinecraftClient.getInstance();
             EnumDropdownPopup.toggle(enumSetting, x + width - 88.0F, y + 19.0F, 130.0F,
                     client.getWindow().getScaledWidth(), client.getWindow().getScaledHeight());
         } else if (setting instanceof ColorSetting color) {
-            if (click.button() == 1) {
+            if (click.button() == 0 || click.button() == 1) {
                 SoundSetting.closeOpen();
+                EnumDropdownPopup.close();
+                FontDropdownPopup.close();
                 MinecraftClient client = MinecraftClient.getInstance();
                 ColorPickerPopup.toggle(color, x + width - 30.0F, y + 19.0F,
                         client.getWindow().getScaledWidth(), client.getWindow().getScaledHeight());

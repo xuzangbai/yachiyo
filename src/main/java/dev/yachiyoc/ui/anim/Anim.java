@@ -1,5 +1,7 @@
 package dev.yachiyoc.ui.anim;
 
+import dev.yachiyoc.ui.UiStyle;
+
 /**
  * Time-based scalar animation. Unlike frame counters this is frame-rate
  * independent and survives pauses correctly.
@@ -38,10 +40,10 @@ public final class Anim {
     }
 
     public void set(float next, long ms, Easing ease) {
-        float current = value();
-        if (Math.abs(next - current) < 1.0E-4F && target == next) {
+        if (target == next) {
             return;
         }
+        float current = value();
         this.start = current;
         this.target = next;
         this.durationMs = Math.max(1L, ms);
@@ -57,7 +59,7 @@ public final class Anim {
     }
 
     private void update() {
-        if (durationMs <= 0L) {
+        if (!UiStyle.animationsEnabled() || durationMs <= 0L) {
             value = target;
             return;
         }

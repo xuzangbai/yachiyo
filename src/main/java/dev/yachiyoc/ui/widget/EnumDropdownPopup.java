@@ -57,6 +57,11 @@ public final class EnumDropdownPopup {
         return closing;
     }
 
+    public static void dismiss() {
+        setting = null;
+        closing = false;
+    }
+
     public static void render(DrawContext context, int mouseX, int mouseY) {
         if (setting == null) {
             return;
@@ -69,12 +74,13 @@ public final class EnumDropdownPopup {
         Object[] values = setting.values();
         float height = height();
         float appear = openAnim.value();
+        Render2D.pushOpacity(appear);
         boolean animating = appear < 0.999F;
         if (animating) {
             Render2D.pushScale(context, x + width / 2.0F, y + height / 2.0F,
                     0.9F + 0.1F * appear);
         }
-        Render2D.roundedBox(context, x, y, width, height, 7.0F, Theme.CARD_BORDER, Theme.WINDOW);
+        Render2D.floatingSurface(context, x, y, width, height, 7.0F, Theme.CARD_BORDER, Theme.WINDOW, mouseX, mouseY);
         for (int i = 0; i < values.length; i++) {
             float rowY = y + 4.0F + i * ROW_HEIGHT;
             boolean hovered = mouseX >= x + 4 && mouseX <= x + width - 4
@@ -90,6 +96,7 @@ public final class EnumDropdownPopup {
         if (animating) {
             Render2D.popScale(context);
         }
+        Render2D.popOpacity();
     }
 
     public static boolean mouseClicked(Click click) {

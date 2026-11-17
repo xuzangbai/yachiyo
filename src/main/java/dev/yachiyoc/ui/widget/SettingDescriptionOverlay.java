@@ -1,6 +1,8 @@
 package dev.yachiyoc.ui.widget;
 
 import dev.yachiyoc.ui.Theme;
+import dev.yachiyoc.ui.anim.Anim;
+import dev.yachiyoc.ui.anim.Easing;
 import dev.yachiyoc.ui.render.Render2D;
 import dev.yachiyoc.ui.render.Text2D;
 import net.minecraft.client.gui.DrawContext;
@@ -13,6 +15,8 @@ import net.minecraft.text.Text;
  */
 public final class SettingDescriptionOverlay {
     private static Text description;
+    private static Text lastDescription;
+    private static final Anim visibility = new Anim(0, 130L, Easing.OUT_CUBIC);
 
     private SettingDescriptionOverlay() {
     }
@@ -26,13 +30,18 @@ public final class SettingDescriptionOverlay {
     }
 
     public static void render(DrawContext context, int screenWidth) {
-        if (description == null) {
+        visibility.set(description == null ? 0 : 1);
+        if (description != null) lastDescription = description;
+        float amount = visibility.value();
+        if (lastDescription == null || amount < 0.002F) {
             return;
         }
-        Text shown = Text2D.trim(description, screenWidth - 36);
+        Text shown = Text2D.trim(lastDescription, screenWidth - 36);
         float width = Math.min(screenWidth - 16.0F, Text2D.width(shown) + 24.0F);
-        Render2D.roundedBox(context, 8.0F, 6.0F, width, 22.0F, 6.0F,
-                Theme.CARD_BORDER, Render2D.withAlpha(Theme.WINDOW, 0.96F));
+        Render2D.pushOpacity(amount);
+        Render2D.floatingSurface(context, 8.0F, 6.0F, width, 22.0F, 6.0F,
+                Theme.CARD_BORDER, Theme.WINDOW, -1000, -1000);
         Text2D.draw(context, shown, 16.0F, 11.0F, Theme.TEXT_DIM, false);
+        Render2D.popOpacity();
     }
 }

@@ -57,6 +57,12 @@ public abstract class Module {
         return setting;
     }
 
+    protected final void group(String name, Setting<?>... members) {
+        for (Setting<?> setting : members) {
+            setting.group(name);
+        }
+    }
+
     public String id() {
         return id;
     }

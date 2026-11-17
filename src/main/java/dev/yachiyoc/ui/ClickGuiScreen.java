@@ -57,6 +57,12 @@ public final class ClickGuiScreen extends Screen {
     private ModuleCategory selected = ModuleCategory.COMBAT;
     private float contentScroll;
     private float sidebarScroll;
+    private final Anim contentMotion = new Anim(0, 150L, Easing.OUT_CUBIC);
+    private final Anim sidebarMotion = new Anim(0, 150L, Easing.OUT_CUBIC);
+    private float positionX = 0.5F, positionY = 0.5F;
+    private float preferredWidth = 760, preferredHeight = 440;
+    private boolean draggingWindow, resizingWindow, closing;
+    private float dragOffsetX, dragOffsetY;
 
     private float windowX;
     private float windowY;
@@ -79,6 +85,11 @@ public final class ClickGuiScreen extends Screen {
 
     @Override
     protected void init() {
+        positionX = YachiyoC.config().data().guiX < 0 ? 0.5F : YachiyoC.config().data().guiX;
+        positionY = YachiyoC.config().data().guiY < 0 ? 0.5F : YachiyoC.config().data().guiY;
+        preferredWidth = YachiyoC.config().data().guiWidth;
+        preferredHeight = YachiyoC.config().data().guiHeight;
+        closing = draggingWindow = resizingWindow = false;
         tabs.clear();
         cardsByCategory.clear();
         for (ModuleCategory category : ModuleCategory.values()) {
@@ -101,6 +112,7 @@ public final class ClickGuiScreen extends Screen {
     private void selectCategory(ModuleCategory category, boolean animate) {
         this.selected = category;
         this.contentScroll = 0.0F;
+        contentMotion.snap(0);
         visibleCards.clear();
         visibleCards.addAll(cardsByCategory.getOrDefault(category, List.of()));
         for (CategoryTab tab : tabs) {
@@ -114,10 +126,10 @@ public final class ClickGuiScreen extends Screen {
 
     private void relayout() {
         float openOffset = (1.0F - open.value()) * 24.0F;
-        windowWidth = Math.min(width - 32.0F, 760.0F);
-        windowHeight = Math.min(height - 32.0F, 440.0F);
-        windowX = (width - windowWidth) / 2.0F;
-        windowY = (height - windowHeight) / 2.0F + openOffset;
+        windowWidth = Math.min(width - 32.0F, Math.max(460, preferredWidth));
+        windowHeight = Math.min(height - 32.0F, Math.max(280, preferredHeight));
+        windowX = 8 + Math.clamp(positionX, 0, 1) * Math.max(0, width - windowWidth - 16);
+        windowY = 8 + Math.clamp(positionY, 0, 1) * Math.max(0, height - windowHeight - 16) + openOffset;
 
         float padding = Theme.PADDING;
         float headerHeight = Theme.HEADER_HEIGHT;
@@ -145,8 +157,9 @@ public final class ClickGuiScreen extends Screen {
         float tabTotal = railItems * (Theme.TAB_HEIGHT + Theme.TAB_GAP) - Theme.TAB_GAP;
         float tabMaxScroll = Math.min(0.0F, (sidebarY + sidebarHeight - 6.0F) - (tabTop + tabTotal));
         sidebarScroll = Math.min(0.0F, Math.max(tabMaxScroll, sidebarScroll));
+        sidebarMotion.set(sidebarScroll);
 
-        float tabY = tabTop + sidebarScroll;
+        float tabY = tabTop + sidebarMotion.value();
         float tabX = sidebarX + 8.0F;
         float tabWidth = sidebarWidth - 16.0F;
         for (CategoryTab tab : tabs) {
@@ -170,8 +183,9 @@ public final class ClickGuiScreen extends Screen {
         }
         float maxScroll = Math.min(0.0F, cardsHeight - total);
         contentScroll = Math.min(0.0F, Math.max(maxScroll, contentScroll));
+        contentMotion.set(contentScroll);
 
-        float cardY = cardsY + contentScroll;
+        float cardY = cardsY + contentMotion.value();
         for (ModuleCard card : filtered) {
             card.setBounds(contentX, cardY, contentWidth);
             cardY += card.height() + Theme.CARD_GAP;
@@ -180,26 +194,25 @@ public final class ClickGuiScreen extends Screen {
 
     @Override
     public void renderBackground(DrawContext ctx, int mouseX, int mouseY, float delta) {
-        float amount = open.value();
-        ctx.fillGradient(0, 0, width, height,
-                Render2D.withAlpha(Theme.OVERLAY_TOP, amount),
-                Render2D.withAlpha(Theme.OVERLAY_BOTTOM, amount));
+        Render2D.background(ctx, width, height, open.value());
     }
 
     @Override
     public void render(DrawContext ctx, int mouseX, int mouseY, float delta) {
+        if (closing && open.value() <= 0.002F) {
+            super.close();
+            return;
+        }
         SettingDescriptionOverlay.beginFrame();
         relayout();
         List<ModuleCard> filtered = visibleCards.stream().filter(card -> search.matches(card.module())).toList();
+        Render2D.pushOpacity(open.value());
 
         // window
         Render2D.elevation(ctx, windowX, windowY, windowWidth, windowHeight,
                 Theme.WINDOW_RADIUS, Theme.SHADOW);
-        Render2D.roundedBox(ctx, windowX, windowY, windowWidth, windowHeight,
-                Theme.WINDOW_RADIUS, Theme.WINDOW_BORDER, Theme.WINDOW);
-        Render2D.roundedRect(ctx, windowX + 1.0F, windowY + 1.0F, windowWidth - 2.0F,
-                Theme.HEADER_HEIGHT, Theme.WINDOW_RADIUS - 1.0F,
-                Render2D.withAlpha(Theme.SECONDARY_CONTAINER, 0.22F));
+        Render2D.surface(ctx, windowX, windowY, windowWidth, windowHeight,
+                Theme.WINDOW_RADIUS, Theme.WINDOW_BORDER, Theme.WINDOW, mouseX, mouseY);
 
         // header logo
         float logoHeight = 36.0F;
@@ -241,9 +254,9 @@ public final class ClickGuiScreen extends Screen {
         }
 
         // content background
-        Render2D.roundedBox(ctx, contentX - 6.0F, contentY - 4.0F,
+        Render2D.surface(ctx, contentX - 6.0F, contentY - 4.0F,
                 contentWidth + 12.0F, contentHeight + 8.0F, Theme.PANEL_RADIUS,
-                Render2D.withAlpha(Theme.OUTLINE, 0.55F), Theme.CONTENT);
+                Render2D.withAlpha(Theme.OUTLINE, 0.55F), Theme.CONTENT, mouseX, mouseY);
 
         Text categoryName = selected.label().copy().formatted(Formatting.BOLD);
         Text2D.draw(ctx, categoryName, contentX + 2.0F, contentY + 10.0F, Theme.TEXT, false);
@@ -261,19 +274,20 @@ public final class ClickGuiScreen extends Screen {
             Text2D.drawCentered(ctx, Text.translatable("ui.yachiyoc.no_results"),
                     contentX + contentWidth / 2.0F, cardsY + 40.0F, Theme.TEXT_MUTED, false);
         } else {
-            float cardY = cardsY + contentScroll;
+            float cardY = cardsY + contentMotion.value();
             for (ModuleCard card : filtered) {
                 // shift, then restore, so scissor stays in screen space
                 card.setBounds(contentX + switchOffset, cardY, contentWidth);
-                card.render(ctx, mouseX, mouseY, selected.accent());
+                boolean blocked = moduleWindow != null && moduleWindow.blocksPointer(mouseX, mouseY);
+                card.render(ctx, blocked ? -1000 : mouseX, blocked ? -1000 : mouseY, selected.accent());
                 cardY += card.height() + Theme.CARD_GAP;
             }
         }
         Render2D.unscissor(ctx);
 
         // right category rail
-        Render2D.roundedBox(ctx, sidebarX, sidebarY, sidebarWidth, sidebarHeight,
-                Theme.PANEL_RADIUS, Render2D.withAlpha(Theme.OUTLINE, 0.55F), Theme.SIDEBAR);
+        Render2D.surface(ctx, sidebarX, sidebarY, sidebarWidth, sidebarHeight,
+                Theme.PANEL_RADIUS, Render2D.withAlpha(Theme.OUTLINE, 0.55F), Theme.SIDEBAR, mouseX, mouseY);
         Text2D.draw(ctx, Text.translatable("ui.yachiyoc.categories"),
                 sidebarX + 12.0F, sidebarY + 8.0F, Theme.TEXT_MUTED, false);
         Render2D.scissor(ctx, sidebarX + 2.0F, sidebarY + 20.0F,
@@ -297,6 +311,11 @@ public final class ClickGuiScreen extends Screen {
                 .formatted(Formatting.DARK_GRAY);
         Text2D.drawRight(ctx, count, windowX + windowWidth - Theme.PADDING,
                 windowY + windowHeight - 17.0F, Theme.TEXT_MUTED, false);
+        for (int i = 0; i < 3; i++) {
+            Render2D.horizontalLine(ctx, windowX + windowWidth - 11 - i * 3,
+                    windowY + windowHeight - 7 - i * 3, 4 + i * 3, Theme.OUTLINE_STRONG);
+        }
+        Render2D.popOpacity();
         if (moduleWindow != null) {
             moduleWindow.render(ctx, mouseX, mouseY, width, height);
             // 关闭动画播完再销毁
@@ -314,6 +333,11 @@ public final class ClickGuiScreen extends Screen {
     }
 
     private void openModuleWindow(Module module, Click click) {
+        search.unfocus();
+        ColorPickerPopup.close();
+        EnumDropdownPopup.close();
+        FontDropdownPopup.close();
+        SoundSetting.closeOpen();
         if (moduleWindow != null) {
             moduleWindow.cancelListening();
         }
@@ -324,6 +348,7 @@ public final class ClickGuiScreen extends Screen {
 
     @Override
     public boolean mouseClicked(Click click, boolean doubled) {
+        if (closing) return true;
         if (FontDropdownPopup.mouseClicked(click)) {
             return true;
         }
@@ -351,6 +376,20 @@ public final class ClickGuiScreen extends Screen {
         if (click.x() >= closeX && click.x() <= closeX + closeSize
                 && click.y() >= closeY && click.y() <= closeY + closeSize) {
             close();
+            return true;
+        }
+        if (click.button() == 0 && click.x() >= windowX + windowWidth - 18 && click.x() <= windowX + windowWidth
+                && click.y() >= windowY + windowHeight - 18 && click.y() <= windowY + windowHeight) {
+            resizingWindow = true;
+            dragOffsetX = (float) click.x() - windowWidth;
+            dragOffsetY = (float) click.y() - windowHeight;
+            return true;
+        }
+        if (click.button() == 0 && click.x() >= windowX && click.x() <= windowX + windowWidth
+                && click.y() >= windowY && click.y() < windowY + Theme.HEADER_HEIGHT) {
+            draggingWindow = true;
+            dragOffsetX = (float) click.x() - windowX;
+            dragOffsetY = (float) click.y() - windowY;
             return true;
         }
         if (search.mouseClicked(click)) {
@@ -400,22 +439,36 @@ public final class ClickGuiScreen extends Screen {
         if (moduleWindow != null && moduleWindow.mouseDragged(click, deltaX, deltaY)) {
             return true;
         }
+        if (draggingWindow) {
+            positionX = Math.clamp(((float) click.x() - dragOffsetX - 8) / Math.max(1, width - windowWidth - 16), 0, 1);
+            positionY = Math.clamp(((float) click.y() - dragOffsetY - 8) / Math.max(1, height - windowHeight - 16), 0, 1);
+            return true;
+        }
+        if (resizingWindow) {
+            float oldX = windowX, oldY = windowY;
+            preferredWidth = Math.clamp((float) click.x() - dragOffsetX, Math.min(460, width - 32), width - 32);
+            preferredHeight = Math.clamp((float) click.y() - dragOffsetY, Math.min(280, height - 32), height - 32);
+            positionX = Math.clamp((oldX - 8) / Math.max(1, width - preferredWidth - 16), 0, 1);
+            positionY = Math.clamp((oldY - 8) / Math.max(1, height - preferredHeight - 16), 0, 1);
+            return true;
+        }
         return false;
     }
 
     @Override
     public boolean mouseReleased(Click click) {
-        if (ColorPickerPopup.mouseReleased(click)) {
-            return true;
-        }
+        ColorPickerPopup.mouseReleased(click);
         if (moduleWindow != null && moduleWindow.mouseReleased(click)) {
             YachiyoC.config().save();
         }
+        if (draggingWindow || resizingWindow) saveLayout();
+        draggingWindow = resizingWindow = false;
         return true;
     }
 
     @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double horizontalAmount, double verticalAmount) {
+        if (closing || ColorPickerPopup.isOpen() || EnumDropdownPopup.open() || FontDropdownPopup.open()) return true;
         if (moduleWindow != null && moduleWindow.mouseScrolled(mouseX, mouseY, verticalAmount)) {
             return true;
         }
@@ -436,6 +489,7 @@ public final class ClickGuiScreen extends Screen {
 
     @Override
     public boolean keyPressed(KeyInput input) {
+        if (ColorPickerPopup.keyPressed(input)) return true;
         DoubleSetting editingNumber = DoubleSetting.active();
         if (editingNumber != null) {
             if (input.key() == GLFW.GLFW_KEY_ESCAPE) {
@@ -464,8 +518,7 @@ public final class ClickGuiScreen extends Screen {
             return true;
         }
         if (input.key() == GLFW.GLFW_KEY_ESCAPE && moduleWindow != null) {
-            moduleWindow.cancelListening();
-            moduleWindow = null;
+            moduleWindow.beginClose();
             return true;
         }
         if (input.key() == GLFW.GLFW_KEY_ESCAPE || input.key() == Keybinds.code()) {
@@ -477,6 +530,8 @@ public final class ClickGuiScreen extends Screen {
 
     @Override
     public boolean charTyped(CharInput input) {
+        if (ColorPickerPopup.charTyped(input)) return true;
+        if (moduleWindow != null && moduleWindow.charTyped(input)) return true;
         DoubleSetting editingNumber = DoubleSetting.active();
         if (editingNumber != null) {
             editingNumber.typeChar((char) input.codepoint());
@@ -503,20 +558,29 @@ public final class ClickGuiScreen extends Screen {
         if (moduleWindow != null) {
             moduleWindow.cancelListening();
         }
-        ColorPickerPopup.close();
+        ColorPickerPopup.dismiss();
+        EnumDropdownPopup.dismiss();
+        FontDropdownPopup.dismiss();
         saveLayout();
         super.removed();
     }
 
     @Override
     public void close() {
+        if (closing) return;
         saveLayout();
-        super.close();
+        closing = true;
+        draggingWindow = resizingWindow = false;
+        open.set(0, 160L, Easing.OUT_CUBIC);
+        if (moduleWindow != null) moduleWindow.beginClose();
     }
 
     private void saveLayout() {
-        // Layout is fully responsive now; only module state/settings need saving.
-        YachiyoC.config().save();
+        YachiyoC.config().data().guiX = positionX;
+        YachiyoC.config().data().guiY = positionY;
+        YachiyoC.config().data().guiWidth = preferredWidth;
+        YachiyoC.config().data().guiHeight = preferredHeight;
+        YachiyoC.saveAll();
     }
 }
 

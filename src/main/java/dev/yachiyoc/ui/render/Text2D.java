@@ -69,6 +69,8 @@ public final class Text2D {
     }
 
     public static void draw(DrawContext ctx, Text text, float x, float y, int color, boolean shadow) {
+        color = Render2D.applyOpacity(color);
+        if ((color >>> 24) < 4) return;
         if (external()) {
             externalRenderer.draw(ctx, text, x, y, color, shadow);
             return;
@@ -88,11 +90,7 @@ public final class Text2D {
         ctx.getMatrices().pushMatrix();
         ctx.getMatrices().translate(x, y);
         ctx.getMatrices().scale(scale, scale);
-        if (external()) {
-            externalRenderer.draw(ctx, text, 0.0F, 0.0F, color, shadow);
-        } else {
-            ctx.drawText(renderer(), text, 0, 0, color, shadow);
-        }
+        draw(ctx, text, 0, 0, color, shadow);
         ctx.getMatrices().popMatrix();
     }
 

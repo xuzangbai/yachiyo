@@ -2,6 +2,8 @@ package dev.yachiyoc.ui.widget;
 
 import dev.yachiyoc.module.Module;
 import dev.yachiyoc.ui.Theme;
+import dev.yachiyoc.ui.anim.Anim;
+import dev.yachiyoc.ui.anim.Easing;
 import dev.yachiyoc.ui.render.Render2D;
 import dev.yachiyoc.ui.render.Text2D;
 import net.minecraft.client.gui.Click;
@@ -20,6 +22,7 @@ public final class SearchField {
     private float height;
     private String query = "";
     private boolean focused;
+    private final Anim focus = new Anim(0, 140L, Easing.OUT_CUBIC);
     private Text placeholder = Text.translatable("ui.yachiyoc.search");
 
     public SearchField(float x, float y, float width, float height) {
@@ -39,6 +42,10 @@ public final class SearchField {
 
     public String query() {
         return query;
+    }
+
+    public void clear() {
+        query = "";
     }
 
     public boolean focused() {
@@ -63,8 +70,10 @@ public final class SearchField {
     }
 
     public void render(DrawContext ctx, float mouseX, float mouseY) {
-        int border = focused ? Theme.SEARCH_BORDER_FOCUS : Theme.SEARCH_BORDER;
-        int fill = focused ? Theme.SEARCH_FILL_FOCUS : Theme.SEARCH_FILL;
+        focus.set(focused ? 1 : 0);
+        float amount = focus.value();
+        int border = Render2D.mix(Theme.SEARCH_BORDER, Theme.SEARCH_BORDER_FOCUS, amount);
+        int fill = Render2D.mix(Theme.SEARCH_FILL, Theme.SEARCH_FILL_FOCUS, amount);
         float radius = height / 2.0F;
         Render2D.roundedBox(ctx, x, y, width, height, radius, border, fill);
         Render2D.roundedRect(ctx, x + 9.0F, y + height / 2.0F - 3.0F, 3.0F, 6.0F,
@@ -75,7 +84,7 @@ public final class SearchField {
         Text shown;
         if (query.isEmpty()) {
             shown = placeholder;
-            Text2D.draw(ctx, shown, textX + (focused ? 6.0F : 0.0F), textY,
+            Text2D.draw(ctx, Text2D.trim(shown, (int) width - 34), textX + amount * 6, textY,
                     Theme.TEXT_MUTED, false);
         } else {
             shown = Text2D.trim(Text.literal(query), (int) width - 34);

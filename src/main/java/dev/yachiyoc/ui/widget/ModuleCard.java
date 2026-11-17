@@ -1,7 +1,6 @@
 package dev.yachiyoc.ui.widget;
 
 import dev.yachiyoc.YachiyoC;
-import dev.yachiyoc.YachiyoC;
 import dev.yachiyoc.module.Module;
 import dev.yachiyoc.ui.Theme;
 import dev.yachiyoc.ui.anim.Anim;
@@ -56,14 +55,14 @@ public final class ModuleCard {
         hover.set(hovered ? 1.0F : 0.0F);
         float hoverAmount = hover.value();
 
-        int cardColor = module.enabled()
-                ? Render2D.mix(Theme.CARD_ACTIVE, accent, 0.10F)
-                : Render2D.mix(Theme.CARD, Theme.CARD_HOVER, hoverAmount);
+        toggleAnim.set(module.enabled() ? 1 : 0);
+        int cardColor = Render2D.mix(Render2D.mix(Theme.CARD, Theme.CARD_HOVER, hoverAmount),
+                Render2D.mix(Theme.CARD_ACTIVE, accent, 0.10F), toggleAnim.value());
         int borderColor = module.enabled() || hovered
                 ? Render2D.withAlpha(accent, 0.35F + hoverAmount * 0.25F)
                 : Theme.CARD_BORDER;
         Render2D.elevation(ctx, x, y, width, Theme.CARD_HEIGHT, Theme.CARD_RADIUS, Theme.SHADOW);
-        Render2D.roundedBox(ctx, x, y, width, Theme.CARD_HEIGHT, Theme.CARD_RADIUS, borderColor, cardColor);
+        Render2D.surface(ctx, x, y, width, Theme.CARD_HEIGHT, Theme.CARD_RADIUS, borderColor, cardColor, mouseX, mouseY);
         if (hovered) {
             Render2D.roundedRect(ctx, x + 1.0F, y + 1.0F, width - 2.0F, Theme.CARD_HEIGHT - 2.0F,
                     Theme.CARD_RADIUS - 1.0F, Theme.STATE_LAYER);

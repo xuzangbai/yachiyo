@@ -9,6 +9,8 @@ import net.minecraft.client.render.VertexFormats;
 import net.minecraft.client.gl.UniformType;
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.util.Identifier;
+import dev.yachiyoc.ui.Theme;
+import dev.yachiyoc.ui.UiStyle;
 
 public final class Render2D {
     private static final RenderPipeline LOGO_INVERT = RenderPipeline.builder()
@@ -45,6 +47,40 @@ public final class Render2D {
      * {@link #roundedRect} 会退化成直角填充，不会崩。
      */
     private static final RenderPipeline ROUNDED_CORNER = buildRoundedCorner();
+    private static final RenderPipeline GLASS = effectPipeline("liquid_glass");
+    private static final RenderPipeline COLOR_PLANE = effectPipeline("color_plane");
+    private static final RenderPipeline HUE_BAR = effectPipeline("hue_bar");
+    private static final RenderPipeline ALPHA_BAR = effectPipeline("alpha_bar");
+    private static final float[] OPACITY_STACK = new float[16];
+    private static int opacityDepth;
+    private static float opacity = 1;
+
+    public static void pushOpacity(float amount) {
+        OPACITY_STACK[opacityDepth++] = opacity;
+        opacity *= Math.clamp(amount, 0, 1);
+    }
+
+    public static void popOpacity() {
+        opacity = OPACITY_STACK[--opacityDepth];
+    }
+
+    public static int applyOpacity(int color) {
+        return withAlpha(color, opacity);
+    }
+
+    private static RenderPipeline effectPipeline(String name) {
+        return RenderPipeline.builder()
+                .withLocation(Identifier.of("yachiyoc", "pipeline/" + name))
+                .withVertexShader("core/position_tex_color")
+                .withFragmentShader(Identifier.of("yachiyoc", "core/" + name))
+                .withSampler("Sampler0")
+                .withUniform("DynamicTransforms", UniformType.UNIFORM_BUFFER)
+                .withUniform("Projection", UniformType.UNIFORM_BUFFER)
+                .withBlend(BlendFunction.TRANSLUCENT)
+                .withVertexFormat(VertexFormats.POSITION_TEXTURE_COLOR, VertexFormat.DrawMode.QUADS)
+                .withDepthTestFunction(DepthTestFunction.NO_DEPTH_TEST)
+                .withDepthWrite(false).withCull(false).build();
+    }
 
     private static RenderPipeline buildRoundedCorner() {
         try {
@@ -69,11 +105,80 @@ public final class Render2D {
     private Render2D() {
     }
 
+    /** Keep blur behind the UI so text and controls stay sharp. */
+    public static void background(DrawContext ctx, int width, int height, float appear) {
+        float glass = UiStyle.glassAmount();
+        if (glass > 0.01F) {
+            ctx.applyBlur();
+        }
+        ctx.fillGradient(0, 0, width, height,
+                withAlpha(Theme.OVERLAY_TOP, appear * (1.0F - glass * 0.65F)),
+                withAlpha(Theme.OVERLAY_BOTTOM, appear * (1.0F - glass * 0.65F)));
+    }
+
+    /** Translucent tinted surface with a moving specular highlight and soft rim. */
+    public static void surface(DrawContext ctx, float x, float y, float width, float height,
+                               float radius, int border, int color, float mouseX, float mouseY) {
+        surface(ctx, x, y, width, height, radius, border, color, mouseX, mouseY, 0.42F);
+    }
+
+    public static void floatingSurface(DrawContext ctx, float x, float y, float width, float height,
+                                       float radius, int border, int color, float mouseX, float mouseY) {
+        surface(ctx, x, y, width, height, radius, border, color, mouseX, mouseY, 0.14F);
+    }
+
+    private static void surface(DrawContext ctx, float x, float y, float width, float height,
+                                float radius, int border, int color, float mouseX, float mouseY, float transmission) {
+        float glass = UiStyle.glassAmount();
+        if (glass <= 0.002F) {
+            roundedBox(ctx, x, y, width, height, radius, border, color);
+            return;
+        }
+        roundedRect(ctx, x, y, width, height, radius, withAlpha(color, 1.0F - glass * transmission));
+        int px = Math.round(Math.clamp((mouseX - x) / Math.max(1.0F, width), 0.0F, 1.0F) * 255.0F);
+        int py = Math.round(Math.clamp((mouseY - y) / Math.max(1.0F, height), 0.0F, 1.0F) * 255.0F);
+        int r = Math.round(Math.clamp(radius / Math.max(1.0F, Math.min(width, height)), 0.0F, 0.5F) * 255.0F);
+        effect(ctx, GLASS, x, y, width, height, (Math.round(glass * opacity * 255.0F) << 24) | (px << 16) | (py << 8) | r);
+    }
+
+    private static void effect(DrawContext ctx, RenderPipeline pipeline, float x, float y,
+                               float width, float height, int controls) {
+        Identifier white = UiTextures.white();
+        if (white != null && width > 0 && height > 0) {
+            ctx.drawTexture(pipeline, white, (int) x, (int) y, 0, 0,
+                    (int) width, (int) height, 1, 1, 1, 1, controls);
+        }
+    }
+
+    public static void colorPlane(DrawContext ctx, float x, float y, float width, float height, int hueColor) {
+        effect(ctx, COLOR_PLANE, x, y, width, height, applyOpacity(0xFF000000 | (hueColor & 0xFFFFFF)));
+    }
+
+    public static void hueBar(DrawContext ctx, float x, float y, float width, float height) {
+        effect(ctx, HUE_BAR, x, y, width, height, applyOpacity(0xFFFFFFFF));
+    }
+
+    public static void alphaBar(DrawContext ctx, float x, float y, float width, float height, int color) {
+        checkerboard(ctx, x, y, width, height, 4.0F);
+        effect(ctx, ALPHA_BAR, x, y, width, height, applyOpacity(0xFF000000 | (color & 0xFFFFFF)));
+    }
+
+    public static void checkerboard(DrawContext ctx, float x, float y, float width, float height, float cell) {
+        scissor(ctx, x, y, width, height);
+        for (int row = 0; row < Math.ceil(height / cell); row++) {
+            for (int column = 0; column < Math.ceil(width / cell); column++) {
+                fill(ctx, x + column * cell, y + row * cell, cell, cell,
+                        (row + column) % 2 == 0 ? 0xFFE4DFEC : 0xFFB8B2C4);
+            }
+        }
+        unscissor(ctx);
+    }
+
     public static void fill(DrawContext ctx, float x, float y, float width, float height, int color) {
         if (width <= 0.0F || height <= 0.0F) {
             return;
         }
-        ctx.fill((int) x, (int) y, (int) (x + width), (int) (y + height), color);
+        ctx.fill((int) x, (int) y, (int) (x + width), (int) (y + height), applyOpacity(color));
     }
 
     public static void texture(DrawContext ctx, Identifier texture, float x, float y, float width, float height,
@@ -84,7 +189,7 @@ public final class Render2D {
         ctx.drawTexture(RenderPipelines.GUI_TEXTURED, texture,
                 (int) x, (int) y, 0.0F, 0.0F,
                 (int) width, (int) height,
-                textureWidth, textureHeight, textureWidth, textureHeight);
+                textureWidth, textureHeight, textureWidth, textureHeight, applyOpacity(0xFFFFFFFF));
     }
 
     /**
@@ -100,7 +205,7 @@ public final class Render2D {
         ctx.drawTexture(LOGO_INVERT, texture,
                 (int) x, (int) y, 0.0F, 0.0F,
                 (int) width, (int) height,
-                textureWidth, textureHeight, textureWidth, textureHeight);
+                textureWidth, textureHeight, textureWidth, textureHeight, applyOpacity(0xFFFFFFFF));
     }
 
     /**
@@ -135,6 +240,7 @@ public final class Render2D {
         if (width <= 0.0F || height <= 0.0F) {
             return;
         }
+        color = applyOpacity(color);
         float r = Math.min(radius, Math.min(width, height) / 2.0F);
         int x0 = (int) Math.ceil(x);
         int x1 = (int) Math.floor(x + width);

@@ -121,6 +121,10 @@ public final class NameTags extends Module {
 
     public NameTags() {
         super("nametags", ModuleCategory.RENDER, true);
+        group("layout", range, scale, height, background, throughWalls, self, invisible);
+        group("information", health, healthBar, distance, ping);
+        group("equipment", equipment, equipName, equipEnchant, equipGapX, equipGapY, equipScale);
+        group("effects", potions, effectTime, turtleSize, turtleStrict);
         healthBar.visibleWhen(health::get);
     }
 

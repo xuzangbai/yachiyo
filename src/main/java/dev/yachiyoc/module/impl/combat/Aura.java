@@ -166,6 +166,12 @@ public final class Aura extends Module {
 
     public Aura() {
         super("aura", ModuleCategory.COMBAT, true);
+        group("targeting", range, targets, targetPriority, throughWalls, grimEyeHeight, reachMargin);
+        group("attack", rotation, attackDelay, pauseEating);
+        group("weapons", autoSwap, weaponType, switchMode, swapInventory, weaponCooldown);
+        group("mace", maceSwap, maceFall, maceSpoof, maceSilent, maceSpoofHeight);
+        group("visuals", espEnabled, espStyle, espThickness, espSonarColor, espSonarRadius,
+                espSonarPeriod, espSonarSpacing, espSonarSpokes, espHaloColor, espHaloAmplitude, espHaloTrail);
 
         targets.description(() -> net.minecraft.text.Text.translatable(
                 "setting.yachiyoc.aura.targets.description"));

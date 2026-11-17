@@ -2,337 +2,355 @@ package dev.yachiyoc.ui.widget;
 
 import dev.yachiyoc.YachiyoC;
 import dev.yachiyoc.module.Module;
+import dev.yachiyoc.module.setting.DoubleSetting;
 import dev.yachiyoc.module.setting.Setting;
+import dev.yachiyoc.module.setting.SoundSetting;
+import dev.yachiyoc.module.setting.StringSetting;
 import dev.yachiyoc.ui.Theme;
+import dev.yachiyoc.ui.anim.Anim;
+import dev.yachiyoc.ui.anim.Easing;
 import dev.yachiyoc.ui.render.Render2D;
 import dev.yachiyoc.ui.render.Text2D;
 import net.minecraft.client.gui.Click;
 import net.minecraft.client.gui.DrawContext;
+import net.minecraft.client.input.CharInput;
 import net.minecraft.client.input.KeyInput;
 import net.minecraft.text.Text;
-import net.minecraft.util.Formatting;
 import org.lwjgl.glfw.GLFW;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 
-/**
- * Floating, draggable module settings window. Opened by right-clicking a module
- * card; all settings are shown in this window instead of the old inline dropdown.
- */
+/** Draggable inspector with semantic groups and a cross-group settings search. */
 public final class ModuleSettingsWindow {
-    private static final float WIDTH = 300.0F;
-    private static final float HEADER = 28.0F;
-    private static final float ROW = 24.0F;
-    private static final float FOOTER = 36.0F;
-
+    private static final float ROW = 30, NAV = 94;
+    private static final Map<String, float[]> POSITIONS = new LinkedHashMap<>();
     private final Module module;
-    private final List<SettingRow> rows = new ArrayList<>();
-    /** 打开时从 94% 放大到 100%，关闭时缩回去。 */
-    private final dev.yachiyoc.ui.anim.Anim open =
-            new dev.yachiyoc.ui.anim.Anim(0.0F, 190L, dev.yachiyoc.ui.anim.Easing.OUT_BACK);
-    /** 正在播放关闭动画；播完由外层置空。 */
-    private boolean closing;
-    private float x;
-    private float y;
-    private float height;
-    private float scroll;
-    private boolean dragging;
-    private float dragOffsetX;
-    private float dragOffsetY;
-    private boolean closeRequested;
-    private boolean confirmReset;
-    private float confirmX;
-    private float confirmY;
-    private float cancelX;
-    private float cancelY;
+    private final List<Entry> entries = new ArrayList<>();
+    private final List<String> groups = new ArrayList<>();
+    private final Map<String, Anim> hovers = new LinkedHashMap<>();
+    private final SearchField search = new SearchField(0, 0, 100, 24);
+    private final Anim open = new Anim(0, 190L, Easing.OUT_CUBIC);
+    private final Anim page = new Anim(1, 180L, Easing.OUT_CUBIC);
+    private final Anim scroll = new Anim(0, 160L, Easing.OUT_CUBIC);
+    private final Anim indicator = new Anim(0, 180L, Easing.OUT_CUBIC);
+    private final Anim navigationScroll = new Anim(0, 150L, Easing.OUT_CUBIC);
+    private String selected, lastQuery = "";
+    private float x, y, width, height, contentX, contentY, contentWidth, contentHeight, totalHeight, offset;
+    private float scale = 1, dragOffsetX, dragOffsetY;
+    private boolean dragging, draggingScroll, closing, closeRequested, confirmReset;
+    private int screenWidth, screenHeight;
+
+    private static final class Entry {
+        final SettingRow row;
+        final String group;
+        final Anim reveal = new Anim(0, 180L, Easing.OUT_CUBIC);
+        float y, amount;
+        boolean matches;
+
+        Entry(Module module, Setting<?> setting, String group) {
+            row = new SettingRow(module, setting);
+            this.group = group;
+        }
+    }
 
     public ModuleSettingsWindow(Module module, float x, float y) {
         this.module = module;
         this.x = x;
         this.y = y;
+        search.setPlaceholder(Text.translatable("ui.yachiyoc.search_settings"));
         for (Setting<?> setting : module.settings()) {
-            rows.add(new SettingRow(module, setting));
+            String group = setting == module.bind || setting == module.trigger ? "keybinds" : setting.group();
+            entries.add(new Entry(module, setting, group));
+            if (!group.equals("keybinds") && !groups.contains(group)) groups.add(group);
         }
-        // 打开瞬间开始播放出现动画
-        open.snap(0.0F);
-        open.set(1.0F);
+        if (module.toggleable()) groups.add("keybinds");
+        if (groups.isEmpty()) groups.add("general");
+        selected = groups.getFirst();
+        for (String group : groups) hovers.put(group, new Anim(0, 120L, Easing.OUT_CUBIC));
+        snapEntries();
+        float[] saved = POSITIONS.get(module.id());
+        if (saved != null) { this.x = saved[0]; this.y = saved[1]; }
+        open.set(1);
     }
 
-    public Module module() {
-        return module;
-    }
+    public Module module() { return module; }
+    public boolean closing() { return closing; }
+    public boolean closeRequested() { return closeRequested; }
+    public boolean finishedClosing() { return closing && open.value() <= 0.002F; }
 
-    /** 开始播放关闭动画（缩回 94%），播完由 {@link #finishedClosing()} 通知外层销毁。 */
     public void beginClose() {
-        if (closing) {
-            return;
-        }
+        if (closing) return;
+        closeEditors();
+        dragging = draggingScroll = false;
         closing = true;
-        open.set(0.0F, 140L, dev.yachiyoc.ui.anim.Easing.OUT_QUART);
+        open.set(0, 140L, Easing.OUT_CUBIC);
     }
 
-    public boolean finishedClosing() {
-        return closing && open.value() <= 0.002F;
+    private void snapEntries() {
+        for (Entry entry : entries) entry.reveal.snap(entry.group.equals(selected) && entry.row.visible() ? 1 : 0);
     }
 
-    public boolean closing() {
-        return closing;
-    }
-
-    public boolean closeRequested() {
-        return closeRequested;
-    }
-
-    public void render(DrawContext context, float mouseX, float mouseY, int screenWidth, int screenHeight) {
-        height = Math.min(screenHeight - 24.0F, HEADER + rows.size() * ROW + FOOTER + 10.0F);
-        x = clamp(x, 6.0F, screenWidth - WIDTH - 6.0F);
-        y = clamp(y, 6.0F, screenHeight - height - 6.0F);
-        float contentHeight = height - HEADER - FOOTER - 4.0F;
-
-        // 出现动画：从 94% 略微"扑"到 100%（OUT_BACK 带一点点过冲）
-        float appear = open.value();
-        Render2D.pushScale(context, x + WIDTH / 2.0F, y + height / 2.0F, 0.94F + 0.06F * appear);
-
-        Render2D.elevation(context, x, y, WIDTH, height, 18.0F, Theme.SHADOW);
-        Render2D.roundedBox(context, x, y, WIDTH, height, 18.0F,
-                Render2D.withAlpha(Theme.OUTLINE_STRONG, 0.65F), Theme.WINDOW);
-        Render2D.roundedRect(context, x + 1.0F, y + 1.0F, WIDTH - 2.0F, HEADER,
-                17.0F, Render2D.withAlpha(Theme.SECONDARY_CONTAINER, 0.22F));
-        Text2D.draw(context, module.name().copy().formatted(Formatting.BOLD), x + 12.0F, y + 8.0F,
-                Theme.TEXT, false);
-        Text2D.draw(context, Text.literal("::"), x + WIDTH - 54.0F, y + 8.0F,
-                Theme.TEXT_MUTED, false);
-
-        float closeX = x + WIDTH - 24.0F;
-        float closeY = y + 7.0F;
-        boolean closeHovered = mouseX >= closeX && mouseX <= closeX + 15
-                && mouseY >= closeY && mouseY <= closeY + 15;
-        Render2D.roundedRect(context, closeX, closeY, 15.0F, 15.0F, 7.5F,
-                closeHovered ? 0x44FF5A5A : Theme.STATE_LAYER);
-        for (int i = 0; i < 5; i++) {
-            Render2D.fill(context, closeX + 5 + i, closeY + 5 + i, 1.0F, 1.0F, Theme.TEXT_DIM);
-            Render2D.fill(context, closeX + 9 - i, closeY + 5 + i, 1.0F, 1.0F, Theme.TEXT_DIM);
+    private void layout(int screenWidth, int screenHeight) {
+        this.screenWidth = screenWidth;
+        this.screenHeight = screenHeight;
+        width = Math.min(424, screenWidth - 12.0F);
+        height = Math.min(386, screenHeight - 12.0F);
+        x = clamp(x, 6, screenWidth - width - 6);
+        y = clamp(y, 6, screenHeight - height - 6);
+        contentX = x + NAV + 18;
+        contentY = y + 76;
+        contentWidth = width - NAV - 30;
+        contentHeight = Math.max(1, height - 116);
+        search.setBounds(x + 12, y + 40, width - 24, 24);
+        String query = search.query().strip().toLowerCase(Locale.ROOT);
+        if (!query.equals(lastQuery)) { scroll.snap(0); lastQuery = query; }
+        totalHeight = 0;
+        for (Entry entry : entries) {
+            Setting<?> setting = entry.row.setting();
+            entry.matches = entry.row.visible() && (query.isEmpty() ? entry.group.equals(selected)
+                    : setting.id().contains(query) || setting.label().getString().toLowerCase(Locale.ROOT).contains(query)
+                    || groupLabel(entry.group).getString().toLowerCase(Locale.ROOT).contains(query));
+            entry.reveal.set(entry.matches ? 1 : 0);
+            entry.amount = entry.reveal.value();
+            entry.y = totalHeight;
+            totalHeight += ROW * entry.amount;
         }
-
-        Render2D.horizontalLine(context, x + 8.0F, y + HEADER, WIDTH - 16.0F, Theme.SEPARATOR);
-        Render2D.scissor(context, x + 1.0F, y + HEADER + 2.0F, WIDTH - 2.0F, contentHeight);
-
-        float rowY = y + HEADER + 4.0F - scroll;
-        for (SettingRow row : rows) {
-            if (!row.visible()) {
-                continue;
-            }
-            row.setBounds(x + 8.0F, rowY, WIDTH - 16.0F);
-            row.render(context, mouseX, mouseY, Theme.ACCENT);
-            rowY += ROW;
+        float maxScroll = Math.max(0, totalHeight - contentHeight);
+        scroll.set(clamp(scroll.target(), 0, maxScroll));
+        offset = clamp(scroll.value(), 0, maxScroll);
+        float slide = (1 - page.value()) * 9;
+        for (Entry entry : entries) {
+            entry.row.setBounds(contentX + slide, contentY + entry.y - offset, contentWidth - 7);
         }
-        Render2D.unscissor(context);
+        indicator.set(groups.indexOf(selected) * 26.0F);
+        navigationScroll.set(clamp(navigationScroll.target(), 0, Math.max(0, groups.size() * 26 - contentHeight)));
+    }
 
-        float maxScroll = Math.max(0.0F, rows.size() * ROW - contentHeight);
-        scroll = clamp(scroll, 0.0F, maxScroll);
-        if (maxScroll > 0.0F) {
-            float barHeight = Math.max(20.0F, contentHeight * contentHeight / (rows.size() * ROW));
-            float barY = y + HEADER + 4.0F + scroll / maxScroll * (contentHeight - barHeight);
-            Render2D.roundedRect(context, x + WIDTH - 5.0F, barY, 2.0F, barHeight, 1.0F,
-                    Render2D.withAlpha(Theme.TEXT, 0.35F));
+    public void render(DrawContext ctx, float mouseX, float mouseY, int screenWidth, int screenHeight) {
+        layout(screenWidth, screenHeight);
+        scale = 0.96F + open.value() * 0.04F;
+        float mx = localX(mouseX), my = localY(mouseY);
+        Render2D.pushScale(ctx, x + width / 2, y + height / 2, scale);
+        Render2D.pushOpacity(open.value());
+        Render2D.elevation(ctx, x, y, width, height, 18, Theme.SHADOW);
+        Render2D.floatingSurface(ctx, x, y, width, height, 18, Theme.OUTLINE_STRONG, Theme.WINDOW, mx, my);
+        Text2D.draw(ctx, Text2D.trim(module.name(), (int) width - 72), x + 14, y + 15, Theme.TEXT, false);
+        boolean closeHover = contains(mx, my, x + width - 32, y + 7, 24, 24);
+        Render2D.roundedRect(ctx, x + width - 32, y + 7, 24, 24, 8,
+                Render2D.withAlpha(Theme.DANGER, closeHover ? 0.20F : 0.06F));
+        Text2D.drawCentered(ctx, Text.literal("×"), x + width - 20, y + 14, Theme.TEXT_DIM, false);
+        search.render(ctx, mx, my);
+        Render2D.verticalLine(ctx, x + NAV + 8, contentY, contentHeight, Theme.SEPARATOR);
+        Render2D.scissor(ctx, x + 8, contentY, NAV - 4, contentHeight);
+        if (search.query().isBlank()) {
+            Render2D.roundedRect(ctx, x + 10, contentY + indicator.value() - navigationScroll.value(), NAV - 8, 24, 8,
+                    Render2D.withAlpha(Theme.ACCENT, 0.13F));
         }
+        for (int i = 0; i < groups.size(); i++) {
+            String group = groups.get(i);
+            float gy = contentY + i * 26 - navigationScroll.value();
+            boolean hovered = contains(mx, my, x + 10, gy, NAV - 8, 24);
+            Anim hover = hovers.get(group);
+            hover.set(hovered ? 1 : 0);
+            Render2D.roundedRect(ctx, x + 10, gy, NAV - 8, 24, 8,
+                    Render2D.withAlpha(Theme.ACCENT, hover.value() * 0.08F));
+            Text2D.draw(ctx, Text2D.trim(groupLabel(group), (int) NAV - 20), x + 18, gy + 8,
+                    group.equals(selected) && search.query().isBlank() ? Theme.ACCENT : Theme.TEXT_DIM, false);
+        }
+        Render2D.unscissor(ctx);
+        Render2D.scissor(ctx, contentX, contentY, contentWidth, contentHeight);
+        boolean any = false;
+        for (Entry entry : entries) {
+            if (entry.amount <= 0.01F) continue;
+            float ry = contentY + entry.y - offset;
+            if (ry + ROW < contentY || ry > contentY + contentHeight) continue;
+            any |= entry.matches;
+            Render2D.scissor(ctx, contentX, ry, contentWidth, ROW * entry.amount);
+            boolean overContent = contains(mx, my, contentX, contentY, contentWidth, contentHeight);
+            Render2D.pushOpacity(entry.amount * page.value());
+            entry.row.render(ctx, overContent ? mx : -1000, overContent ? my : -1000, Theme.ACCENT);
+            Render2D.popOpacity();
+            Render2D.unscissor(ctx);
+        }
+        if (!any && totalHeight < 1) {
+            Text2D.drawCentered(ctx, Text.translatable("ui.yachiyoc.no_settings"),
+                    contentX + contentWidth / 2, contentY + 30, Theme.TEXT_MUTED, false);
+        }
+        Render2D.unscissor(ctx);
+        if (totalHeight > contentHeight) {
+            float barHeight = Math.max(24, contentHeight * contentHeight / totalHeight);
+            float barY = contentY + offset / (totalHeight - contentHeight) * (contentHeight - barHeight);
+            Render2D.roundedRect(ctx, x + width - 9, barY, 3, barHeight, 1.5F,
+                    Render2D.withAlpha(Theme.ACCENT, draggingScroll ? 0.8F : 0.4F));
+        }
+        Render2D.horizontalLine(ctx, x + 12, y + height - 37, width - 24, Theme.SEPARATOR);
+        Text2D.draw(ctx, Text2D.trim(Text.translatable("ui.yachiyoc.settings_hint"), (int) width - 110),
+                x + 14, y + height - 22, Theme.TEXT_MUTED, false);
+        boolean resetHover = contains(mx, my, x + width - 88, y + height - 31, 76, 24);
+        Render2D.roundedRect(ctx, x + width - 88, y + height - 31, 76, 24, 7,
+                Render2D.withAlpha(Theme.DANGER, resetHover ? 0.17F : 0.06F));
+        Text2D.drawCentered(ctx, Text.translatable("ui.yachiyoc.reset_module"),
+                x + width - 50, y + height - 23, Theme.DANGER, false);
+        Render2D.popOpacity();
+        Render2D.popScale(ctx);
+        if (confirmReset) renderConfirm(ctx, mouseX, mouseY);
+    }
 
-        float footerY = y + height - FOOTER + 5.0F;
-        boolean footerHovered = mouseX >= x + 8.0F && mouseX <= x + WIDTH - 8.0F
-                && mouseY >= footerY && mouseY <= footerY + 24.0F;
-        Render2D.roundedBox(context, x + 8.0F, footerY, WIDTH - 16.0F, 24.0F, 6.0F,
-                Render2D.withAlpha(Theme.DANGER, footerHovered ? 0.95F : 0.70F),
-                Render2D.withAlpha(Theme.DANGER, footerHovered ? 0.92F : 0.75F));
-        Text2D.drawCentered(context, Text.translatable("module.yachiyoc.reset_all"),
-                x + WIDTH / 2.0F, footerY + 8.0F, 0xFFFFFFFF, false);
+    private void renderConfirm(DrawContext ctx, float mouseX, float mouseY) {
+        Render2D.fill(ctx, 0, 0, screenWidth, screenHeight, 0x55000000);
+        float w = Math.min(330, screenWidth - 20), cx = (screenWidth - w) / 2, cy = (screenHeight - 116) / 2.0F;
+        Render2D.floatingSurface(ctx, cx, cy, w, 116, 16, Theme.OUTLINE, Theme.WINDOW, mouseX, mouseY);
+        Text2D.drawCentered(ctx, Text2D.trim(Text.translatable("module.yachiyoc.reset_confirm", module.name()), (int) w - 20),
+                cx + w / 2, cy + 27, Theme.TEXT, false);
+        for (int i = 0; i < 2; i++) {
+            float bx = screenWidth / 2.0F - 98 + i * 106;
+            Render2D.roundedRect(ctx, bx, cy + 78, 90, 24, 8,
+                    i == 0 ? Render2D.withAlpha(Theme.DANGER, 0.18F) : Theme.FIELD);
+            Text2D.drawCentered(ctx, Text.translatable(i == 0 ? "module.yachiyoc.confirm" : "module.yachiyoc.cancel"),
+                    bx + 45, cy + 86, i == 0 ? Theme.DANGER : Theme.TEXT_DIM, false);
+        }
+    }
 
+    public boolean mouseClicked(Click original, int screenWidth, int screenHeight) {
+        if (closing) return inside(localX(original.x()), localY(original.y()));
         if (confirmReset) {
-            renderConfirm(context, mouseX, mouseY, screenWidth, screenHeight);
-        }
-
-        Render2D.popScale(context);
-    }
-
-    private void renderConfirm(DrawContext context, float mouseX, float mouseY,
-                               int screenWidth, int screenHeight) {
-        context.fill(0, 0, screenWidth, screenHeight, 0x44000000);
-        float width = Math.min(330.0F, screenWidth - 30.0F);
-        float height = 116.0F;
-        float panelX = (screenWidth - width) / 2.0F;
-        float panelY = (screenHeight - height) / 2.0F;
-        Render2D.roundedBox(context, panelX, panelY, width, height, 12.0F,
-                Theme.WINDOW_BORDER, Theme.WINDOW);
-
-        Text message = Text.translatable("module.yachiyoc.reset_confirm", module.name());
-        Text2D.drawCentered(context, message, panelX + width / 2.0F, panelY + 28.0F,
-                Theme.TEXT, false);
-
-        float buttonY = panelY + height - 38.0F;
-        confirmX = panelX + width / 2.0F - 98.0F;
-        confirmY = buttonY;
-        cancelX = panelX + width / 2.0F + 8.0F;
-        cancelY = buttonY;
-        boolean confirmHovered = mouseX >= confirmX && mouseX <= confirmX + 90
-                && mouseY >= buttonY && mouseY <= buttonY + 24;
-        boolean cancelHovered = mouseX >= cancelX && mouseX <= cancelX + 90
-                && mouseY >= buttonY && mouseY <= buttonY + 24;
-        Render2D.roundedBox(context, confirmX, confirmY, 90.0F, 24.0F, 6.0F,
-                Render2D.withAlpha(Theme.DANGER, 0.95F),
-                Render2D.withAlpha(Theme.DANGER, confirmHovered ? 0.95F : 0.78F));
-        Text2D.drawCentered(context, Text.translatable("module.yachiyoc.confirm"),
-                confirmX + 45.0F, confirmY + 8.0F, 0xFFFFFFFF, false);
-        Render2D.roundedBox(context, cancelX, cancelY, 90.0F, 24.0F, 6.0F,
-                Theme.CARD_BORDER, Theme.FIELD);
-        Text2D.drawCentered(context, Text.translatable("module.yachiyoc.cancel"),
-                cancelX + 45.0F, cancelY + 8.0F, Theme.TEXT_DIM, false);
-    }
-
-    public boolean mouseClicked(Click click, int screenWidth, int screenHeight) {
-        if (closing) {
-            return false;
-        }
-        
-        if (confirmReset) {
-            if (click.x() >= confirmX && click.x() <= confirmX + 90
-                    && click.y() >= confirmY && click.y() <= confirmY + 24) {
-                resetAll();
-            }
+            if (original.button() == 0 && contains(original.x(), original.y(), screenWidth / 2.0F - 98,
+                    (screenHeight - 116) / 2.0F + 78, 90, 24)) resetAll();
             confirmReset = false;
             return true;
         }
-        float footerY = y + height - FOOTER + 5.0F;
-        if (click.x() >= x + 8.0F && click.x() <= x + WIDTH - 8.0F
-                && click.y() >= footerY && click.y() <= footerY + 24.0F) {
-            confirmReset = true;
-            return true;
-        }
-        float closeX = x + WIDTH - 24.0F;
-        float closeY = y + 7.0F;
-        if (click.x() >= closeX && click.x() <= closeX + 15
-                && click.y() >= closeY && click.y() <= closeY + 15) {
+        Click click = new Click(localX(original.x()), localY(original.y()), original.buttonInfo());
+        if (!inside(click.x(), click.y())) { search.unfocus(); return false; }
+        if (click.button() == 0 && contains(click.x(), click.y(), x + width - 32, y + 7, 24, 24)) {
             closeRequested = true;
             return true;
         }
-        if (click.x() >= x && click.x() <= x + WIDTH
-                && click.y() >= y && click.y() <= y + HEADER) {
+        if (click.button() == 0 && click.y() < y + 35) {
+            closeEditors();
             dragging = true;
-            dragOffsetX = (float) click.x() - x;
-            dragOffsetY = (float) click.y() - y;
+            dragOffsetX = (float) original.x() - x;
+            dragOffsetY = (float) original.y() - y;
             return true;
         }
-        if (!inside(click.x(), click.y())) {
-            return false;
+        if (search.mouseClicked(click)) { closeEditors(); return true; }
+        search.unfocus();
+        if (click.button() == 0 && contains(click.x(), click.y(), x + width - 88, y + height - 31, 76, 24)) {
+            closeEditors();
+            confirmReset = true;
+            return true;
         }
-        for (SettingRow row : rows) {
-            if (row.visible() && row.mouseClicked(click)) {
-                return true;
+        if (click.button() == 0 && contains(click.x(), click.y(), x + 10, contentY, NAV - 8, contentHeight)) {
+            int index = (int) ((click.y() - contentY + navigationScroll.value()) / 26);
+            if (index < groups.size()) {
+                closeEditors();
+                search.clear();
+                selected = groups.get(index);
+                scroll.snap(0);
+                page.snap(0);
+                page.set(1);
+                snapEntries();
+            }
+            return true;
+        }
+        if (click.button() == 0 && totalHeight > contentHeight
+                && contains(click.x(), click.y(), x + width - 14, contentY, 12, contentHeight)) {
+            draggingScroll = true;
+            updateScroll((float) click.y());
+            return true;
+        }
+        if (contains(click.x(), click.y(), contentX, contentY, contentWidth - 7, contentHeight)) {
+            for (Entry entry : entries) {
+                if (entry.matches && entry.amount > 0.98F && entry.row.mouseClicked(click)) return true;
             }
         }
         return true;
     }
 
     public boolean mouseDragged(Click click, double deltaX, double deltaY) {
-        if (closing) {
-            return false;
-        }
-        
-        if (confirmReset) {
-            return true;
-        }
+        if (closing || confirmReset) return false;
         if (dragging) {
-            x = Math.round((float) click.x() - dragOffsetX);
-            y = Math.round((float) click.y() - dragOffsetY);
+            x = clamp((float) click.x() - dragOffsetX, 6, screenWidth - width - 6);
+            y = clamp((float) click.y() - dragOffsetY, 6, screenHeight - height - 6);
             return true;
         }
-        for (SettingRow row : rows) {
-            if (row.visible() && row.mouseDragged(click, deltaX, deltaY)) {
-                return true;
-            }
+        if (draggingScroll) { updateScroll(localY(click.y())); return true; }
+        Click local = new Click(localX(click.x()), localY(click.y()), click.buttonInfo());
+        for (Entry entry : entries) {
+            if (entry.matches && entry.row.mouseDragged(local, deltaX, deltaY)) return true;
         }
         return false;
     }
 
+    private void updateScroll(float mouseY) {
+        float bar = Math.max(24, contentHeight * contentHeight / totalHeight);
+        scroll.snap(clamp((mouseY - contentY - bar / 2) / Math.max(1, contentHeight - bar), 0, 1)
+                * Math.max(0, totalHeight - contentHeight));
+    }
+
     public boolean mouseReleased(Click click) {
-        if (confirmReset) {
-            return true;
-        }
-        boolean changed = false;
-        for (SettingRow row : rows) {
-            if (row.visible()) {
-                row.mouseReleased(click);
-                changed = true;
-            }
-        }
-        if (dragging) {
-            dragging = false;
-            changed = true;
-        }
-        return changed;
+        boolean handled = dragging || draggingScroll || inside(localX(click.x()), localY(click.y()));
+        if (dragging) POSITIONS.put(module.id(), new float[] { x, y });
+        dragging = draggingScroll = false;
+        for (Entry entry : entries) entry.row.mouseReleased(click);
+        return handled;
     }
 
     public boolean mouseScrolled(double mouseX, double mouseY, double amount) {
-        if (closing) {
-            return false;
-        }
-        
-        if (confirmReset) {
+        if (!inside(localX(mouseX), localY(mouseY))) return false;
+        if (contains(localX(mouseX), localY(mouseY), x + 8, contentY, NAV, contentHeight)) {
+            navigationScroll.set(clamp(navigationScroll.target() - (float) amount * 32,
+                    0, Math.max(0, groups.size() * 26 - contentHeight)));
             return true;
         }
-        if (!inside(mouseX, mouseY)) {
-            return false;
-        }
-        float contentHeight = height - HEADER - FOOTER - 4.0F;
-        float maxScroll = Math.max(0.0F, rows.size() * ROW - contentHeight);
-        scroll = clamp(scroll - (float) amount * ROW * 2.0F, 0.0F, maxScroll);
+        if (!closing && !confirmReset) scroll.set(clamp(scroll.target() - (float) amount * ROW * 1.5F,
+                0, Math.max(0, totalHeight - contentHeight)));
         return true;
     }
 
     public boolean keyPressed(KeyInput input) {
-        if (closing) {
-            return false;
-        }
-        
-        if (confirmReset) {
-            if (input.key() == GLFW.GLFW_KEY_ESCAPE) {
-                confirmReset = false;
-            }
-            return true;
-        }
-        for (SettingRow row : rows) {
-            if (row.visible() && row.keyPressed(input)) {
-                return true;
-            }
-        }
+        if (closing) return true;
+        if (confirmReset) { if (input.key() == GLFW.GLFW_KEY_ESCAPE) confirmReset = false; return true; }
+        if (search.focused()) return search.keyPressed(input);
+        for (Entry entry : entries) if (entry.matches && entry.row.keyPressed(input)) return true;
         return false;
     }
 
+    public boolean charTyped(CharInput input) { return search.charTyped(input); }
+
+    public boolean blocksPointer(double mouseX, double mouseY) {
+        return confirmReset || inside(localX(mouseX), localY(mouseY));
+    }
+
     private void resetAll() {
-        for (Setting<?> setting : module.settings()) {
-            setting.reset();
-        }
-        // 一键重置也把功能级按键清掉（先拷贝一份 key，避免边遍历边删）
-        for (String settingId : new ArrayList<>(module.settingBinds().keySet())) {
-            module.setBindById(settingId, -1);
-        }
-        for (SettingRow row : rows) {
-            row.refresh();
-        }
+        for (Entry entry : entries) { entry.row.setting().reset(); entry.row.refresh(); }
+        for (String id : new ArrayList<>(module.settingBinds().keySet())) module.setBindById(id, -1);
+        YachiyoC.saveAll();
+    }
+
+    private void closeEditors() {
+        cancelListening();
         ColorPickerPopup.close();
-        YachiyoC.config().save();
+        EnumDropdownPopup.close();
+        FontDropdownPopup.close();
+        SoundSetting.closeOpen();
+        DoubleSetting.stopAllEditing();
+        StringSetting.stopAllEditing();
     }
 
     public void cancelListening() {
-        for (SettingRow row : rows) {
-            row.cancelListening();
-        }
+        for (Entry entry : entries) { entry.row.cancelListening(); entry.row.mouseReleased(null); }
     }
 
-    private boolean inside(double mouseX, double mouseY) {
-        return mouseX >= x && mouseX <= x + WIDTH && mouseY >= y && mouseY <= y + height;
+    private static Text groupLabel(String group) { return Text.translatable("ui.yachiyoc.group." + group); }
+    private float localX(double px) { return x + width / 2 + ((float) px - x - width / 2) / scale; }
+    private float localY(double py) { return y + height / 2 + ((float) py - y - height / 2) / scale; }
+    private boolean inside(double px, double py) { return contains(px, py, x, y, width, height); }
+    private static boolean contains(double px, double py, float x, float y, float w, float h) {
+        return px >= x && px <= x + w && py >= y && py <= y + h;
     }
-
-    private static float clamp(float value, float min, float max) {
-        return Math.max(min, Math.min(max, value));
-    }
+    private static float clamp(float value, float min, float max) { return Math.max(min, Math.min(max, value)); }
 }
