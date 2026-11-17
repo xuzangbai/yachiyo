@@ -7,28 +7,31 @@ import dev.yachiyoc.module.setting.DoubleSetting;
 import dev.yachiyoc.platform.Debug;
 import dev.yachiyoc.platform.EffectParticles;
 import dev.yachiyoc.render.Render;
+import dev.yachiyoc.render.RenderApi;
+import dev.yachiyoc.render.NameTagLayout;
+import dev.yachiyoc.ui.Theme;
 import dev.yachiyoc.ui.render.UiTextures;
 import dev.yachiyoc.render.Render3DCallbacks;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.network.ClientPlayNetworkHandler;
-import net.minecraft.client.network.ClientPlayerEntity;
 import net.minecraft.client.network.PlayerListEntry;
-import net.minecraft.component.DataComponentTypes;
-import net.minecraft.component.type.ItemEnchantmentsComponent;
-import net.minecraft.enchantment.Enchantment;
 import net.minecraft.component.DataComponentTypes;
 import net.minecraft.component.type.ItemEnchantmentsComponent;
 import net.minecraft.enchantment.Enchantment;
 import net.minecraft.enchantment.EnchantmentHelper;
 import net.minecraft.entity.EquipmentSlot;
 import net.minecraft.item.ItemStack;
-import net.minecraft.registry.entry.RegistryEntry;import net.minecraft.entity.effect.StatusEffectCategory;
+import net.minecraft.registry.entry.RegistryEntry;
+import net.minecraft.entity.effect.StatusEffectCategory;
 import net.minecraft.entity.effect.StatusEffects;
 import net.minecraft.entity.effect.StatusEffectInstance;
 import net.minecraft.entity.player.PlayerEntity;
-import net.minecraft.item.ItemStack;
 import net.minecraft.registry.Registries;
 import net.minecraft.text.Text;
+import net.minecraft.text.MutableText;
+import net.minecraft.text.Style;
+import net.minecraft.util.Formatting;
+import net.minecraft.world.World;
 import net.minecraft.util.Identifier;
 import net.minecraft.util.math.Vec3d;
 
@@ -40,6 +43,7 @@ import java.util.UUID;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
+import java.util.Optional;
 
 /**
  * 名字标签：在玩家头顶画名字、血量、距离、延迟、药水状态。
@@ -51,9 +55,6 @@ import java.util.Locale;
  * （原版会给追踪范围内实体的效果包，但不少反作弊/隐藏插件会把别人的效果剥掉）。
  */
 public final class NameTags extends Module {
-    /** 文字行高（方块）：0.025 是原版名牌的字号，乘以 10 行距。 */
-    private static final float LINE = 0.025F * 10.0F;
-    /** 药水最多显示几个，避免一排标签糊满屏幕。 */
     /** 装备显示顺序：头胸腿脚 → 主手 → 副手。 */
     private static final EquipmentSlot[] EQUIPMENT_ORDER = {
             EquipmentSlot.HEAD, EquipmentSlot.CHEST, EquipmentSlot.LEGS, EquipmentSlot.FEET,
@@ -69,6 +70,8 @@ public final class NameTags extends Module {
             add(new DoubleSetting("nametags", "range", 96.0, 8.0, 512.0, 8.0));
     private final DoubleSetting scale =
             add(new DoubleSetting("nametags", "scale", 1.0, 0.4, 2.5, 0.05));
+    private final BoolSetting constantSize =
+            add(new BoolSetting("nametags", "constant_size", true));
     private final DoubleSetting height =
             add(new DoubleSetting("nametags", "height", 0.0, -2.0, 3.0, 0.05));
     private final BoolSetting health =
@@ -87,19 +90,19 @@ public final class NameTags extends Module {
     /** 装备文字纵向间距（倍数，1 = 默认行距）。 */
     private final DoubleSetting equipGapY =
             add(new DoubleSetting("nametags", "equip_gap_y", 1.0, 0.4, 3.0, 0.05));
-    /** 装备图标大小（方块）。 */
+    /** 装备图标相对大小；固定屏幕模式下 0.5 对应 20 个 GUI 像素。 */
     private final DoubleSetting equipScale =
             add(new DoubleSetting("nametags", "equip_scale", 0.5, 0.2, 1.5, 0.05));
     /** 装备总开关（默认关）。 */
     private final BoolSetting equipment =
             add(new BoolSetting("nametags", "equipment", false));
-    /** 图标上方显示装备名字。 */
+    /** 图标下方完整显示装备名字。 */
     private final BoolSetting equipName =
             add(new BoolSetting("nametags", "equip_name", true));
-    /** 图标下方显示附魔。 */
+    /** 图标上方完整显示附魔。 */
     private final BoolSetting equipEnchant =
             add(new BoolSetting("nametags", "equip_enchant", true));
-    /** 神龟图标大小（单位：行高，1 行高 ≈ 0.25 格）。 */
+    /** 神龟图标大小（单位：行高，固定屏幕模式下 1 对应 10 个 GUI 像素）。 */
     private final DoubleSetting turtleSize =
             add(new DoubleSetting("nametags", "turtle_size", 7.0, 1.0, 40.0, 0.5));
     private final BoolSetting effectTime =
@@ -118,14 +121,36 @@ public final class NameTags extends Module {
     private final Runnable renderTask = this::renderNameTags;
     /** UUID -> {当前图标下标, 下次重摇时间}。 */
     private final Map<UUID, long[]> iconRoll = new HashMap<>();
+    private final Map<UUID, TagState> tags = new HashMap<>();
+    private final List<PlayerEntity> visiblePlayers = new ArrayList<>();
+    private World renderedWorld;
+    private static final float NAME_FONT = 1.05F, INFO_FONT = 0.82F, EFFECT_FONT = 0.80F, GEAR_FONT = 0.74F;
+
+    private record Chip(Text text, float width, int color) { }
+    private record Gear(ItemStack stack, float width, List<Text> names, List<Text> enchantments) { }
+
+    private static final class TagState {
+        final NameTagLayout.Vitals vitals = new NameTagLayout.Vitals();
+        long refreshed, lastSeen;
+        Text name;
+        float nameWidth, bodyWidth, chipWidth;
+        List<Chip> chips = List.of();
+        List<Text> effects = List.of();
+        List<Gear> gear = List.of();
+        boolean turtle;
+    }
 
     public NameTags() {
         super("nametags", ModuleCategory.RENDER, true);
-        group("layout", range, scale, height, background, throughWalls, self, invisible);
+        group("layout", range, scale, constantSize, height, background, throughWalls, self, invisible);
         group("information", health, healthBar, distance, ping);
         group("equipment", equipment, equipName, equipEnchant, equipGapX, equipGapY, equipScale);
         group("effects", potions, effectTime, turtleSize, turtleStrict);
         healthBar.visibleWhen(health::get);
+        constantSize.description(() -> Text.translatable("setting.yachiyoc.nametags.constant_size.description"));
+        scale.description(() -> Text.translatable("setting.yachiyoc.nametags.scale.description"));
+        // Persisted enabled state is restored without onEnable(), so the callback stays registered.
+        Render3DCallbacks.register(renderTask);
     }
 
     @Override
@@ -135,199 +160,269 @@ public final class NameTags extends Module {
 
     @Override
     public void onDisable() {
-        Render3DCallbacks.unregister(renderTask);
+        tags.clear();
+        visiblePlayers.clear();
+        iconRoll.clear();
+        particleCache.clear();
+        renderedWorld = null;
     }
 
     private void renderNameTags() {
         MinecraftClient client = MinecraftClient.getInstance();
-        ClientPlayerEntity me = client.player;
-        if (me == null || client.world == null || !Render.api().inWorld()) {
-            return;
+        if (!enabled() || client.player == null || client.world == null || !Render.api().inWorld()) return;
+        if (renderedWorld != client.world) {
+            tags.clear();
+            iconRoll.clear();
+            particleCache.clear();
+            renderedWorld = client.world;
         }
-        Vec3d cameraPos = Render.api().cameraPos();
-        double maxRange = range.get();
-        List<? extends PlayerEntity> players = client.world.getPlayers().stream()
-                .filter(player -> player != me || self.get())
-                .filter(player -> invisible.get() || !player.isInvisible())
-                .filter(player -> throughWalls.get() || me.canSee(player))
-                .filter(player -> player.squaredDistanceTo(cameraPos) <= maxRange * maxRange)
-                .sorted(Comparator.comparingDouble(player -> -player.squaredDistanceTo(cameraPos)))
-                .toList();
-
-        if (Debug.enabled("nametags")) {
-            StringBuilder summary = new StringBuilder();
-            for (PlayerEntity player : players) {
-                summary.append(' ').append(player.getName().getString())
-                        .append('=').append(player.getStatusEffects().size());
-            }
-            Debug.logThrottled("nametags", 2000L, "labels=%d%s", players.size(), summary.toString());
+        RenderApi api = Render.api();
+        Vec3d camera = api.cameraPos();
+        double squaredRange = range.get() * range.get();
+        visiblePlayers.clear();
+        for (PlayerEntity player : client.world.getPlayers()) {
+            if (player.isRemoved() || (player == client.player && !self.get())
+                    || (player.isInvisible() && !invisible.get())
+                    || (!throughWalls.get() && !client.player.canSee(player))
+                    || player.squaredDistanceTo(camera) > squaredRange) continue;
+            visiblePlayers.add(player);
         }
-
-        for (PlayerEntity player : players) {
-            draw(client, me, player);
+        visiblePlayers.sort(Comparator.comparingDouble(player -> -player.squaredDistanceTo(camera)));
+        long now = System.nanoTime();
+        if (Debug.enabled("nametags")) Debug.logThrottled("nametags", 2000L,
+                "labels=%d constant_size=%s", visiblePlayers.size(), constantSize.get());
+        boolean previousDepth = api.throughWalls();
+        try {
+            api.throughWalls(throughWalls.get());
+            for (PlayerEntity player : visiblePlayers) draw(client, player, now);
+        } finally {
+            api.throughWalls(previousDepth);
         }
+        tags.entrySet().removeIf(entry -> now - entry.getValue().lastSeen > 2_000_000_000L);
+        iconRoll.keySet().removeIf(id -> !tags.containsKey(id));
+        particleCache.keySet().removeIf(id -> !tags.containsKey(id));
     }
 
-    private void draw(MinecraftClient client, ClientPlayerEntity me, PlayerEntity player) {
-        float zoom = scale.get().floatValue();
-        // 用 tickDelta 插值：直接拿 getX() 是每 tick 跳一次，走起来会一抽一抽
-        float td = Render.api().tickDelta();
-        Vec3d lerped = player.getLerpedPos(td);
-        Vec3d anchor = new Vec3d(lerped.x,
-                lerped.y + player.getHeight() + 0.42D + height.get(), lerped.z);
+    private void draw(MinecraftClient client, PlayerEntity player, long now) {
+        RenderApi api = Render.api();
+        Vec3d lerped = player.getLerpedPos(api.tickDelta());
+        Vec3d anchor = lerped.add(0, player.getHeight() + 0.30 + height.get(), 0);
+        float pixelSize = api.billboardPixelSize(anchor);
+        if (pixelSize <= 0) return;
+        float unit = (constantSize.get() ? pixelSize : 0.025F) * scale.get().floatValue();
+        TagState state = tags.computeIfAbsent(player.getUuid(), ignored -> new TagState());
+        state.lastSeen = now;
+        state.vitals.update(player.getHealth(), player.getMaxHealth(), player.getAbsorptionAmount(), now);
+        if (state.name == null || now - state.refreshed >= 120_000_000L) refresh(client, player, lerped, state, now);
 
-        List<Text> lines = new ArrayList<>(3);
-        lines.add(Text.literal(player.getName().getString()));
-        String info = infoLine(client, player);
-        if (!info.isEmpty()) {
-            lines.add(Text.literal(info));
-        }
-        String effects = potions.get() ? effectsLine(player) : "";
-        if (effects.isEmpty() && potions.get()) {
-            // 效果包没有 → 读元数据；元数据也没有 → 用身上冒的粒子兜底
-            effects = metadataEffects(player);
-            if (effects.isEmpty()) {
-                effects = particleEffects(player, lerped);
-            }
-        }
-        if (!effects.isEmpty()) {
-            lines.add(Text.literal(effects));
-        }
-
-        if (Debug.enabled("nametags")) {
-            Vec3d screen = Render.api().project(anchor);
-            Debug.logThrottled("nametags", 2000L, "label %s anchor=(%.1f, %.1f, %.1f) screen=%s lines=%d",
-                    player.getName().getString(), anchor.x, anchor.y, anchor.z,
-                    screen == null ? "behind" : String.format(Locale.ROOT, "%.3f, %.3f",
-                            screen.x, screen.y),
-                    lines.size());
-        }
-        boolean bar = healthBar.get();
-        float lineHeight = LINE * zoom;
-        float widest = 0.0F;
-        for (Text line : lines) {
-            widest = Math.max(widest, Render.api().textWidth(line, zoom));
-        }
-        float contentWidth = widest + 0.03F;
-        float contentHeight = lineHeight * lines.size() + (bar ? lineHeight * 0.45F : 0.0F) + 0.012F;
-
-        if (equipment.get()) {
-            drawEquipment(player, anchor, lineHeight, zoom);
-        }
+        boolean bar = health.get() && healthBar.get();
+        boolean absorption = bar && (player.getAbsorptionAmount() > 0 || state.vitals.absorption() > 0.005F);
+        float textHeight = 13 + (state.chips.isEmpty() ? 0 : 16)
+                + (state.effects.isEmpty() ? 0 : state.effects.size() * 10 + 7);
+        float mainHeight = textHeight + 16 + (bar ? 12 + (absorption ? 7 : 0) : 0);
+        float badgeSize = state.turtle ? 10 * turtleSize.get().floatValue() : 0;
+        float badgeWidth = state.turtle ? badgeSize + 12 : 0;
+        float width = state.bodyWidth + badgeWidth;
+        float cardHeight = Math.max(mainHeight, state.turtle ? badgeSize + 16 : 0);
+        float left = -width / 2, top = -cardHeight;
+        float mainLeft = left + badgeWidth;
+        float mainTop = top + (cardHeight - mainHeight) / 2;
         if (background.get()) {
-            Vec3d boardCenter = anchor.add(0.0D,
-                    -(contentHeight / 2.0F - lineHeight / 2.0F), 0.0D);
-            Render.api().billboardRect(boardCenter, contentWidth, contentHeight, 0x66000000);
+            panel(api, anchor, left - 1, top + 1, width + 2, cardHeight + 2, unit, -0.15F, 0x35000000);
+            panel(api, anchor, left, top, width, cardHeight, unit, 0, 0xD0191722);
+            panel(api, anchor, mainLeft + 7, mainTop + 8, 2, 10, unit, 0.10F, Theme.ACCENT);
         }
-
-        // 神龟药水：紧贴标签上方挂一个图标（每 ICON_ROLL_MS 重摇一次）
-        // 敌人拿不到效果包，所以除了真实数据，也要认"推断出来的抗性提升"
-        if (potions.get() && (isTurtleMaster(player) || isInferredTurtle(effects))) {
-            float size = lineHeight * turtleSize.get().floatValue();
-            Render.api().billboardImage(turtleIcon(player),
-                    anchor.add(0.0D, lineHeight * 0.55D + size * 0.5D, 0.0D), size, size);
+        text(api, anchor, state.name, mainLeft + 14, mainTop + 8, NAME_FONT, unit, 0xFFF8F6FF);
+        float rowY = mainTop + 24;
+        float chipX = mainLeft + 8;
+        for (Chip chip : state.chips) {
+            if (background.get()) panel(api, anchor, chipX, rowY - 2, chip.width(), 13, unit, 0.12F,
+                    0x20000000 | (chip.color() & 0xFFFFFF));
+            text(api, anchor, chip.text(), chipX + 4, rowY, INFO_FONT, unit, chip.color());
+            chipX += chip.width() + 4;
         }
-
-        for (int i = 0; i < lines.size(); i++) {
-            int color = i == 0 ? 0xFFFFFFFF : (i == 1 ? 0xFFD6D6D6 : 0xFFB9C7FF);
-            Render.api().text(lines.get(i), anchor.add(0.0D, -lineHeight * i, 0.0D), zoom,
-                    color, true, throughWalls.get());
-        }
-
-        if (bar) {
-            float maxHealth = Math.max(1.0F, player.getMaxHealth());
-            float health = Math.max(0.0F, player.getHealth());
-            // 伤害吸收是额外的黄心，不算在 getHealth() 里：总长度按「血量 + 吸收」算，
-            // 这样 20 血 + 8 吸收就是 28 点，红段 71%、黄段 29%
-            float absorption = Math.max(0.0F, player.getAbsorptionAmount());
-            float total = maxHealth + absorption;
-            float healthRatio = Math.min(1.0F, health / total);
-            float absorbRatio = Math.min(1.0F - healthRatio, absorption / total);
-
-            float barWidth = contentWidth * 0.94F;
-            float barHeight = lineHeight * 0.28F;
-            double barY = anchor.y - lineHeight * lines.size() - barHeight * 0.5D;
-            // 三层共面会深度打架：底板在最里，红、黄依次往相机方向挪 0.02 / 0.04 格（5mm 不够，深度精度会抖）
-            Vec3d barPos = new Vec3d(anchor.x, barY, anchor.z);
-            float barLeft = -barWidth / 2.0F;
-            Render.api().billboardRect(barPos, barWidth, barHeight, 0x99000000);
-            if (healthRatio > 0.01F) {
-                float center = barLeft + barWidth * healthRatio / 2.0F;
-                Render.api().billboardRect(
-                        Render.api().billboardOffset(barPos, center, 0.0F, 0.02F),
-                        barWidth * healthRatio, barHeight, healthColor(healthRatio));
-            }
-            if (absorbRatio > 0.01F) {
-                // 黄段左端 = 红段右端，不能重叠
-                float center = barLeft + barWidth * healthRatio + barWidth * absorbRatio / 2.0F;
-                Render.api().billboardRect(
-                        Render.api().billboardOffset(barPos, center, 0.0F, 0.04F),
-                        barWidth * absorbRatio, barHeight, 0xFFFFD24A);
+        if (!state.chips.isEmpty()) rowY += 16;
+        if (!state.effects.isEmpty()) {
+            if (background.get()) panel(api, anchor, mainLeft + 8, rowY - 1,
+                    state.bodyWidth - 16, state.effects.size() * 10 + 4, unit, 0.12F, 0x1CABA1E8);
+            for (Text effect : state.effects) {
+                text(api, anchor, effect, mainLeft + 12, rowY + 2, EFFECT_FONT, unit, 0xFFCFC4FF);
+                rowY += 10;
             }
         }
+        if (bar) drawHealth(api, anchor, mainLeft + 8, mainTop + mainHeight - (absorption ? 20 : 13),
+                state.bodyWidth - 16, state, unit, absorption);
+        if (state.turtle) {
+            api.billboardImage(turtleIcon(player), at(api, anchor, left + 8 + badgeSize / 2,
+                    top + cardHeight / 2, unit, 0.4F), badgeSize * unit, badgeSize * unit);
+        }
+        drawEquipment(api, anchor, state.gear, top - 7, unit);
     }
 
-    /**
-     * 「神龟药水」在原版里不是一个独立效果，而是 **抗性提升 + 缓慢** 同时存在
-     * （Turtle Master = Resistance III + Slowness IV），所以按这两者判定。
-     */
-    /**
-     * 装备显示：一排物品图标（上方是名字、下方是附魔），照着 Alien / Hachimi 的布局来。
-     * 图标用 {@code RenderApi.item()} 画真实 3D 模型，文字用 billboard 贴在图标上下。
-     */
-    private void drawEquipment(PlayerEntity player, Vec3d anchor, float lineHeight, float zoom) {
-        List<ItemStack> items = new ArrayList<>(6);
+    private void refresh(MinecraftClient client, PlayerEntity player, Vec3d lerped, TagState state, long now) {
+        state.refreshed = now;
+        state.name = Text.literal(player.getName().getString()).formatted(Formatting.BOLD);
+        state.nameWidth = pixels(state.name, NAME_FONT);
+        List<Chip> chips = new ArrayList<>(3);
+        if (health.get()) {
+            String value = String.format(Locale.ROOT, "%.1f / %.0f", player.getHealth(), player.getMaxHealth());
+            MutableText hp = Text.literal(value);
+            if (player.getAbsorptionAmount() > 0) hp.append(Text.literal(String.format(Locale.ROOT,
+                    " +%.1f", player.getAbsorptionAmount())).withColor(0xFFD24A));
+            addChip(chips, hp, healthColor(player.getHealth() / Math.max(1, player.getMaxHealth())));
+        }
+        if (distance.get()) addChip(chips, Text.literal(String.format(Locale.ROOT, "%.1fm", player.distanceTo(client.player))), 0xFFC2C7DA);
+        if (ping.get()) {
+            int latency = latency(client, player);
+            if (latency >= 0) addChip(chips, Text.literal(latency + "ms"),
+                    latency < 100 ? 0xFF8EDDB8 : latency < 200 ? 0xFFFFCF7D : 0xFFFF919D);
+        }
+        state.chips = chips;
+        state.chipWidth = 0;
+        for (Chip chip : chips) state.chipWidth += chip.width() + 4;
+        if (!chips.isEmpty()) state.chipWidth -= 4;
+        state.bodyWidth = Math.max(112, Math.max(state.nameWidth + 26, state.chipWidth + 16));
+
+        String effects = potions.get() ? effectsLine(player) : "";
+        if (potions.get() && effects.isEmpty()) {
+            effects = metadataEffects(player);
+            if (effects.isEmpty()) effects = particleEffects(player, lerped);
+        }
+        if (!effects.isEmpty()) state.bodyWidth = Math.max(state.bodyWidth,
+                Math.min(200, pixels(Text.literal(effects), EFFECT_FONT) + 24));
+        List<Text> effectLines = new ArrayList<>();
+        for (String line : NameTagLayout.wrap(effects, state.bodyWidth - 24,
+                value -> pixels(Text.literal(value), EFFECT_FONT))) effectLines.add(Text.literal(line));
+        state.effects = effectLines;
+        state.turtle = potions.get() && (isTurtleMaster(player) || isInferredTurtle(effects));
+        state.gear = equipment.get() ? equipment(player) : List.of();
+    }
+
+    private static void addChip(List<Chip> chips, Text text, int color) {
+        chips.add(new Chip(text, pixels(text, INFO_FONT) + 8, color));
+    }
+
+    private List<Gear> equipment(PlayerEntity player) {
+        List<Gear> result = new ArrayList<>(6);
         for (EquipmentSlot slot : EQUIPMENT_ORDER) {
-            ItemStack stack = player.getEquippedStack(slot);
-            if (!stack.isEmpty()) {
-                items.add(stack);
-            }
-        }
-        if (items.isEmpty()) {
-            return;
-        }
-        float icon = equipScale.get().floatValue();
-        float gapX = equipGapX.get().floatValue();
-        float gapY = equipGapY.get().floatValue();
-        float spacing = icon * gapX;
-        float textScale = zoom * 0.8F;
-        float rowY = (float) anchor.y + lineHeight * 0.5F * gapY + icon * 0.75F
-                + lineHeight * 0.9F * gapY;
-        Vec3d row = new Vec3d(anchor.x, rowY, anchor.z);
-
-        for (int i = 0; i < items.size(); i++) {
-            ItemStack stack = items.get(i);
-            float offset = (i - (items.size() - 1) / 2.0F) * spacing;
-            Vec3d pos = Render.api().billboardOffset(row, offset, 0.0F);
-            Render.api().item(stack, pos, icon);
-
-            // 名字在图标**下方**
-            if (equipName.get()) {
-                Text name = stack.get(DataComponentTypes.CUSTOM_NAME);
-                if (name == null) {
-                    name = stack.getName();
+            ItemStack equipped = player.getEquippedStack(slot);
+            if (equipped.isEmpty()) continue;
+            ItemStack stack = equipped.copy();
+            Text name = stack.get(DataComponentTypes.CUSTOM_NAME);
+            if (name == null) name = stack.getName();
+            List<Text> enchantments = new ArrayList<>();
+            if (equipEnchant.get()) {
+                ItemEnchantmentsComponent component = EnchantmentHelper.getEnchantments(stack);
+                for (RegistryEntry<Enchantment> entry : component.getEnchantments()) {
+                    int level = component.getLevel(entry);
+                    enchantments.add(entry.value().description().copy().append(level > 1 ? " " + roman(level) : ""));
                 }
-                Render.api().text(name,
-                        Render.api().billboardOffset(pos, 0.0F, -(icon * 0.55F + lineHeight * 0.7F) * gapY),
-                        textScale, 0xFFFFFFFF, true, throughWalls.get());
             }
+            float widest = equipName.get() ? pixels(name, GEAR_FONT) : 0;
+            for (Text enchantment : enchantments) widest = Math.max(widest, pixels(enchantment, GEAR_FONT));
+            float column = Math.max(equipScale.get().floatValue() / 0.025F + 8, Math.clamp(widest + 10, 34, 66));
+            List<Text> names = equipName.get() ? wrapStyled(name, column - 8) : List.of();
+            List<Text> wrappedEnchantments = new ArrayList<>();
+            for (Text enchantment : enchantments) wrappedEnchantments.addAll(wrapStyled(enchantment, column - 8));
+            result.add(new Gear(stack, column, names, wrappedEnchantments));
+        }
+        return result;
+    }
 
-            // 附魔在图标**上方**，逐行往上堆
-            if (!equipEnchant.get()) {
-                continue;
+    /** Preserve all styled text while wrapping long custom item names and enchantments. */
+    private static List<Text> wrapStyled(Text source, float width) {
+        List<Text> lines = new ArrayList<>();
+        MutableText[] line = {Text.empty()};
+        source.visit((style, value) -> {
+            for (int offset = 0; offset < value.length();) {
+                int point = value.codePointAt(offset);
+                offset += Character.charCount(point);
+                if (point == '\n') { lines.add(line[0]); line[0] = Text.empty(); continue; }
+                Text glyph = Text.literal(new String(Character.toChars(point))).setStyle(style);
+                MutableText next = line[0].copy().append(glyph);
+                if (!line[0].getString().isEmpty() && pixels(next, GEAR_FONT) > width) {
+                    lines.add(line[0]);
+                    line[0] = Text.empty();
+                }
+                line[0].append(glyph);
             }
-            ItemEnchantmentsComponent enchantments = EnchantmentHelper.getEnchantments(stack);
-            float enchantY = (icon * 0.55F + lineHeight * 0.6F) * gapY;
-            for (RegistryEntry<Enchantment> entry : enchantments.getEnchantments()) {
-                int level = enchantments.getLevel(entry);
-                String label = entry.value().description().getString() + (level > 1 ? roman(level) : "");
-                Render.api().text(Text.literal(label),
-                        Render.api().billboardOffset(pos, 0.0F, enchantY),
-                        textScale, 0xFFB9C7FF, true, throughWalls.get());
-                enchantY += lineHeight * 0.85F * gapY;
+            return Optional.empty();
+        }, Style.EMPTY);
+        if (!line[0].getString().isEmpty()) lines.add(line[0]);
+        return lines;
+    }
+
+    private void drawEquipment(RenderApi api, Vec3d anchor, List<Gear> gear, float bottom, float unit) {
+        if (gear.isEmpty()) return;
+        float icon = equipScale.get().floatValue() / 0.025F;
+        float vertical = equipGapY.get().floatValue();
+        float lineStep = Math.max(8, 8 * vertical);
+        int enchantLines = 0, nameLines = 0;
+        float width = 0;
+        float gap = Math.max(4, icon * (equipGapX.get().floatValue() - 1));
+        for (Gear slot : gear) {
+            enchantLines = Math.max(enchantLines, slot.enchantments().size());
+            nameLines = Math.max(nameLines, slot.names().size());
+            width += slot.width() + gap;
+        }
+        width -= gap;
+        float above = enchantLines * lineStep;
+        float below = nameLines * lineStep;
+        float height = 12 + above + icon + below + (nameLines > 0 ? 4 * vertical : 0);
+        float top = bottom - height;
+        float left = -width / 2;
+        for (Gear slot : gear) {
+            if (background.get()) panel(api, anchor, left, top, slot.width(), height, unit, 0, 0xBF191722);
+            float middle = left + slot.width() / 2;
+            float iconY = top + 6 + above + icon / 2;
+            api.item(slot.stack(), at(api, anchor, middle, iconY, unit, 0.4F), icon * unit);
+            float y = top + 5;
+            for (Text label : slot.enchantments()) {
+                text(api, anchor, label, middle - pixels(label, GEAR_FONT) / 2, y, GEAR_FONT, unit, 0xFFCFC4FF);
+                y += lineStep;
             }
+            y = iconY + icon / 2 + 4 * vertical;
+            for (Text label : slot.names()) {
+                text(api, anchor, label, middle - pixels(label, GEAR_FONT) / 2, y, GEAR_FONT, unit, 0xFFE8E5F2);
+                y += lineStep;
+            }
+            left += slot.width() + gap;
         }
     }
+
+    private static void drawHealth(RenderApi api, Vec3d anchor, float x, float y, float width,
+                                   TagState state, float unit, boolean absorption) {
+        // Track, delayed damage and current HP use separate depths in the same camera-facing plane.
+        panel(api, anchor, x, y, width, 6, unit, 0.10F, 0xCC0C0C13);
+        if (state.vitals.trail() > state.vitals.fill() + 0.002F)
+            panel(api, anchor, x, y, width * state.vitals.trail(), 6, unit, 0.20F, 0xDFF1B8A3);
+        if (state.vitals.fill() > 0.002F)
+            panel(api, anchor, x, y, width * state.vitals.fill(), 6, unit, 0.30F, healthColor(state.vitals.fill()));
+        if (absorption) {
+            panel(api, anchor, x, y + 9, width, 3, unit, 0.10F, 0x996A5425);
+            if (state.vitals.absorption() > 0.002F)
+                panel(api, anchor, x, y + 9, width * state.vitals.absorption(), 3, unit, 0.30F, 0xFFFFD24A);
+        }
+    }
+
+    private static Vec3d at(RenderApi api, Vec3d anchor, float x, float y, float unit, float layer) {
+        return api.billboardOffset(anchor, x * unit, -y * unit, layer * unit);
+    }
+
+    private static void panel(RenderApi api, Vec3d anchor, float x, float y, float width, float height,
+                              float unit, float layer, int color) {
+        api.billboardPanel(at(api, anchor, x + width / 2, y + height / 2, unit, layer), width * unit, height * unit, color);
+    }
+
+    private void text(RenderApi api, Vec3d anchor, Text text, float left, float top, float font, float unit, int color) {
+        api.text(text, at(api, anchor, left + pixels(text, font) / 2, top, unit, 0.55F),
+                font * unit / 0.025F, color, true, throughWalls.get());
+    }
+
+    private static float pixels(Text text, float font) {
+        return Render.api().textWidth(text, font) / 0.025F;
+    }
+
     /** 推断行里出现"抗性提升"也算神龟（敌人没有真实效果数据时走这条）。 */
     private boolean isInferredTurtle(String effects) {
         if (turtleStrict.get() || effects == null || effects.isEmpty()) {
@@ -357,33 +452,6 @@ public final class NameTags extends Module {
         }
         return UiTextures.turtleIcon(TURTLE_ICONS[(int) slot[0]]);
     }
-    private String infoLine(MinecraftClient client, PlayerEntity player) {
-        StringBuilder builder = new StringBuilder();
-        if (health.get()) {
-            builder.append(String.format(Locale.ROOT, "%.1f", player.getHealth()));
-            float absorption = player.getAbsorptionAmount();
-            if (absorption > 0.0F) {
-                builder.append('+').append(String.format(Locale.ROOT, "%.1f", absorption));
-            }
-        }
-        if (distance.get()) {
-            if (!builder.isEmpty()) {
-                builder.append("  ");
-            }
-            builder.append(String.format(Locale.ROOT, "%.1fm", player.distanceTo(client.player)));
-        }
-        if (ping.get()) {
-            int latency = latency(client, player);
-            if (latency > 0) {
-                if (!builder.isEmpty()) {
-                    builder.append("  ");
-                }
-                builder.append(latency).append("ms");
-            }
-        }
-        return builder.toString();
-    }
-
     /**
      * 药水状态：有益的排前面，最多 {@link #MAX_EFFECTS} 个。
      * 名字直接用游戏内译名，等级用罗马数字（I 级不写）。
@@ -566,6 +634,7 @@ public final class NameTags extends Module {
 
     /** 血量条颜色：满血偏绿，残血偏红。 */
     private static int healthColor(float ratio) {
+        ratio = Math.clamp(ratio, 0, 1);
         int red = Math.min(255, (int) (255 * (1.0F - ratio)));
         int green = Math.min(255, (int) (200 * ratio) + 40);
         return 0xFF000000 | (red << 16) | (green << 8) | 0x40;

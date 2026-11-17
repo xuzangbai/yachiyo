@@ -12,11 +12,13 @@
     "ChatHudMixin",
     "DecoderHandlerMixin",
     "FontManagerMixin",
+    "GameRendererAccessor",
     "ItemMixin",
     "ItemModelManagerMixin",
     "LancingMixin",
     "MinecraftClientMixin",
     "ScreenHandlerAccessor",
+    "SplashOverlayMixin",
     "EntityRendererMixin",
     "ParticleManagerMixin"
   ],

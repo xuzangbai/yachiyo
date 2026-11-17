@@ -1,9 +1,11 @@
 package dev.yachiyoc.render.v1_21_11;
 
 import com.mojang.blaze3d.pipeline.RenderPipeline;
+import com.mojang.blaze3d.pipeline.BlendFunction;
 import com.mojang.blaze3d.platform.DepthTestFunction;
 import dev.yachiyoc.render.RenderApi;
 import dev.yachiyoc.render.ShapeMode;
+import dev.yachiyoc.render.NameTagLayout;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.font.TextRenderer;
 import net.minecraft.client.gl.RenderPipelines;
@@ -21,6 +23,7 @@ import net.minecraft.client.render.RenderLayers;
 import net.minecraft.client.render.RenderSetup;
 import net.minecraft.client.render.VertexConsumer;
 import net.minecraft.client.render.VertexConsumerProvider;
+import net.minecraft.client.render.VertexFormats;
 import net.minecraft.client.util.math.MatrixStack;
 import net.minecraft.text.Text;
 import net.minecraft.util.Identifier;
@@ -29,6 +32,8 @@ import net.minecraft.util.math.Vec3d;
 import org.joml.Matrix4f;
 import org.joml.Quaternionf;
 import org.joml.Vector4f;
+import java.util.HashMap;
+import java.util.Map;
 
 /**
  * 1.21.11 的 {@link RenderApi} 实现 —— **整个工程里唯一允许 import
@@ -65,6 +70,43 @@ public final class RenderApiImpl implements RenderApi {
             "yachiyoc:esp_through_walls",
             RenderSetup.builder(THROUGH_WALL_PIPELINE).translucent().build());
 
+    private static final RenderLayer SONAR_SURFACE = sonarLayer(false);
+    private static final RenderLayer SONAR_THROUGH_SURFACE = sonarLayer(true);
+    private static final RenderPipeline PANEL_PIPELINE = labelPipeline("nametag_panel", false, false);
+    private static final RenderPipeline PANEL_THROUGH_PIPELINE = labelPipeline("nametag_panel", true, false);
+    private static final RenderPipeline LABEL_IMAGE = labelPipeline("nametag_image", false, true);
+    private static final RenderPipeline LABEL_IMAGE_THROUGH = labelPipeline("nametag_image", true, true);
+    // Blend in submission order. World translucent sorting uses quad-center distance and can
+    // reorder a partial health fill behind its full-width track, despite their depth offsets.
+    private static final RenderLayer LABEL_PANEL = RenderLayer.of("yachiyoc:nametag_panel", RenderSetup.builder(PANEL_PIPELINE).build());
+    private static final RenderLayer LABEL_PANEL_THROUGH = RenderLayer.of("yachiyoc:nametag_panel_through", RenderSetup.builder(PANEL_THROUGH_PIPELINE).build());
+    private static final Map<Identifier, RenderLayer> LABEL_IMAGES = new HashMap<>();
+    private static final Map<Identifier, RenderLayer> LABEL_IMAGES_THROUGH = new HashMap<>();
+
+    private static RenderPipeline labelPipeline(String name, boolean through, boolean image) {
+        RenderPipeline.Builder builder = RenderPipeline.builder(RenderPipelines.POSITION_COLOR_SNIPPET)
+                .withLocation(Identifier.of("yachiyoc", "pipeline/" + name + (through ? "_through" : "")))
+                .withVertexShader("core/position_tex_color")
+                .withFragmentShader(image ? Identifier.ofVanilla("core/position_tex_color") : Identifier.of("yachiyoc", "core/nametag_panel"))
+                .withVertexFormat(VertexFormats.POSITION_TEXTURE_COLOR, com.mojang.blaze3d.vertex.VertexFormat.DrawMode.QUADS)
+                .withDepthTestFunction(through ? DepthTestFunction.NO_DEPTH_TEST : DepthTestFunction.LEQUAL_DEPTH_TEST)
+                .withDepthWrite(false).withCull(false).withBlend(BlendFunction.TRANSLUCENT);
+        if (image) builder.withSampler("Sampler0");
+        return RenderPipelines.register(builder.build());
+    }
+
+    private static RenderLayer sonarLayer(boolean throughWalls) {
+        String name = throughWalls ? "sonar_through" : "sonar_surface";
+        RenderPipeline pipeline = RenderPipelines.register(RenderPipeline.builder(RenderPipelines.POSITION_COLOR_SNIPPET)
+                .withLocation(Identifier.of("yachiyoc", "pipeline/" + name))
+                .withVertexShader(Identifier.of("yachiyoc", "core/sonar_surface"))
+                .withFragmentShader(Identifier.of("yachiyoc", "core/sonar_surface"))
+                .withVertexFormat(VertexFormats.POSITION_COLOR_TEXTURE_OVERLAY_LIGHT_NORMAL, com.mojang.blaze3d.vertex.VertexFormat.DrawMode.QUADS)
+                .withDepthTestFunction(throughWalls ? DepthTestFunction.NO_DEPTH_TEST : DepthTestFunction.LEQUAL_DEPTH_TEST)
+                .withDepthWrite(false).withCull(false).withBlend(BlendFunction.TRANSLUCENT).build());
+        return RenderLayer.of("yachiyoc:" + name, RenderSetup.builder(pipeline).translucent().build());
+    }
+
     private static final OrderedRenderCommandQueueImpl ITEM_QUEUE = new OrderedRenderCommandQueueImpl();
     private static final ItemCommandRenderer ITEM_RENDERER = new ItemCommandRenderer();
     private MatrixStack matrices;
@@ -98,6 +140,7 @@ public final class RenderApiImpl implements RenderApi {
         this.projection = projection;
         this.camera = MC.gameRenderer == null ? null : MC.gameRenderer.getCamera();
         this.tickDelta = tickDelta;
+        this.throughWalls = false;
         this.inWorld = matrices != null && consumers != null && camera != null && camera.isReady();
     }
 
@@ -110,6 +153,7 @@ public final class RenderApiImpl implements RenderApi {
         consumers = null;
         camera = null;
         inWorld = false;
+        throughWalls = false;
     }
 
     @Override
@@ -229,6 +273,31 @@ public final class RenderApiImpl implements RenderApi {
     }
 
     @Override
+    public void sonarQuad(Vec3d a, Vec3d b, Vec3d c, Vec3d d, Vec3d origin,
+                          float radius, float bandWidth, float gridSpacing, int detail, int color) {
+        if (!inWorld || (color >>> 24) == 0) return;
+        VertexConsumer buffer = consumers.getBuffer(throughWalls ? SONAR_THROUGH_SURFACE : SONAR_SURFACE);
+        sonarVertex(buffer, a, origin, radius, bandWidth, gridSpacing, detail, color);
+        sonarVertex(buffer, b, origin, radius, bandWidth, gridSpacing, detail, color);
+        sonarVertex(buffer, c, origin, radius, bandWidth, gridSpacing, detail, color);
+        sonarVertex(buffer, d, origin, radius, bandWidth, gridSpacing, detail, color);
+    }
+
+    private void sonarVertex(VertexConsumer buffer, Vec3d point, Vec3d origin, float radius,
+                             float bandWidth, float gridSpacing, int detail, int color) {
+        // UV0: local XY; UV1: local Z (1/2048) and radius (1/4096).
+        // UV2: spacing (1/4096) and band width (1/16384); normal X: detail / 32.
+        // Keep shader coordinates separate from CPU-transformed camera-relative Position.
+        Vec3d camera = cameraPos();
+        buffer.vertex(matrices.peek().getPositionMatrix(), (float) (point.x - camera.x),
+                        (float) (point.y - camera.y), (float) (point.z - camera.z))
+                .color(color).texture((float) (point.x - origin.x), (float) (point.y - origin.y))
+                .overlay(Math.round((float) (point.z - origin.z) * 2048), Math.round(radius * 4096))
+                .light(Math.round(gridSpacing * 4096), Math.round(bandWidth * 16384))
+                .normal(Math.clamp(detail, 1, 24) / 32.0F, 0, 0);
+    }
+
+    @Override
     public void text(Text text, Vec3d pos, float scale, int color, boolean shadow, boolean throughWalls) {
         if (!inWorld || text == null || MC.textRenderer == null) {
             return;
@@ -255,19 +324,16 @@ public final class RenderApiImpl implements RenderApi {
             return;
         }
         Matrix4f matrix = worldBillboard(center);
-        VertexConsumer buffer = consumers.getBuffer(RenderLayers.entityTranslucent(texture, false));
+        Map<Identifier, RenderLayer> cache = throughWalls ? LABEL_IMAGES_THROUGH : LABEL_IMAGES;
+        VertexConsumer buffer = consumers.getBuffer(cache.computeIfAbsent(texture, id -> RenderLayer.of(
+                "yachiyoc:label_image_" + id, RenderSetup.builder(throughWalls ? LABEL_IMAGE_THROUGH : LABEL_IMAGE)
+                        .texture("Sampler0", id).build())));
         float halfW = width / 2.0F;
         float halfH = height / 2.0F;
-        // entity* 层的顶点格式是 POSITION_TEXTURE_COLOR_NORMAL，overlay/light/normal 必须齐全，
-        // 少一个就会在 flush 时抛 "Missing elements in vertex: UV1, UV2, Normal"
-        buffer.vertex(matrix, -halfW, -halfH, 0.0F).texture(0.0F, 0.0F).color(0xFFFFFFFF)
-                .overlay(OverlayTexture.DEFAULT_UV).light(0x00F000F0).normal(0.0F, 0.0F, 1.0F);
-        buffer.vertex(matrix, -halfW, halfH, 0.0F).texture(0.0F, 1.0F).color(0xFFFFFFFF)
-                .overlay(OverlayTexture.DEFAULT_UV).light(0x00F000F0).normal(0.0F, 0.0F, 1.0F);
-        buffer.vertex(matrix, halfW, halfH, 0.0F).texture(1.0F, 1.0F).color(0xFFFFFFFF)
-                .overlay(OverlayTexture.DEFAULT_UV).light(0x00F000F0).normal(0.0F, 0.0F, 1.0F);
-        buffer.vertex(matrix, halfW, -halfH, 0.0F).texture(1.0F, 0.0F).color(0xFFFFFFFF)
-                .overlay(OverlayTexture.DEFAULT_UV).light(0x00F000F0).normal(0.0F, 0.0F, 1.0F);
+        buffer.vertex(matrix, -halfW, -halfH, 0.0F).texture(0.0F, 0.0F).color(0xFFFFFFFF);
+        buffer.vertex(matrix, -halfW, halfH, 0.0F).texture(0.0F, 1.0F).color(0xFFFFFFFF);
+        buffer.vertex(matrix, halfW, halfH, 0.0F).texture(1.0F, 1.0F).color(0xFFFFFFFF);
+        buffer.vertex(matrix, halfW, -halfH, 0.0F).texture(1.0F, 0.0F).color(0xFFFFFFFF);
     }
 
     @Override
@@ -325,6 +391,27 @@ public final class RenderApiImpl implements RenderApi {
         buffer.vertex(matrix, -halfW, halfH, 0.0F).color(color);
         buffer.vertex(matrix, halfW, halfH, 0.0F).color(color);
         buffer.vertex(matrix, halfW, -halfH, 0.0F).color(color);
+    }
+
+    @Override
+    public float billboardPixelSize(Vec3d anchor) {
+        if (!inWorld || projection == null) return 0;
+        Vec3d relative = anchor.subtract(cameraPos());
+        Vector3f forward = camera.getRotation().transform(new Vector3f(0, 0, -1));
+        double depth = relative.x * forward.x + relative.y * forward.y + relative.z * forward.z;
+        return NameTagLayout.unitsPerPixel(depth, Math.abs(projection.m11()), MC.getWindow().getScaledHeight());
+    }
+
+    @Override
+    public void billboardPanel(Vec3d center, float width, float height, int color) {
+        if (!inWorld || width <= 0 || height <= 0 || (color >>> 24) == 0) return;
+        Matrix4f matrix = worldBillboard(center);
+        VertexConsumer buffer = consumers.getBuffer(throughWalls ? LABEL_PANEL_THROUGH : LABEL_PANEL);
+        float w = width / 2, h = height / 2;
+        buffer.vertex(matrix, -w, -h, 0).texture(0, 0).color(color);
+        buffer.vertex(matrix, -w, h, 0).texture(0, 1).color(color);
+        buffer.vertex(matrix, w, h, 0).texture(1, 1).color(color);
+        buffer.vertex(matrix, w, -h, 0).texture(1, 0).color(color);
     }
 
     @Override

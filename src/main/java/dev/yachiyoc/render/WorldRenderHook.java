@@ -3,6 +3,7 @@ package dev.yachiyoc.render;
 import net.fabricmc.fabric.api.client.rendering.v1.world.WorldRenderContext;
 import net.fabricmc.fabric.api.client.rendering.v1.world.WorldRenderEvents;
 import net.minecraft.client.MinecraftClient;
+import dev.yachiyoc.mixin.GameRendererAccessor;
 import net.minecraft.client.util.math.MatrixStack;
 import org.joml.Matrix4f;
 
@@ -42,7 +43,9 @@ public final class WorldRenderHook {
                 : client.getRenderTickCounter().getTickProgress(true);
         Matrix4f projection;
         try {
-            projection = client.gameRenderer.getBasicProjectionMatrix(client.options.getFov().getValue());
+            float fov = ((GameRendererAccessor) client.gameRenderer).yachiyoc$getFov(
+                    client.gameRenderer.getCamera(), tickDelta, true);
+            projection = client.gameRenderer.getBasicProjectionMatrix(fov);
         } catch (Throwable ignored) {
             projection = new Matrix4f();
         }

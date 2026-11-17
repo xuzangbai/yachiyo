@@ -78,9 +78,12 @@ public final class Aura extends Module {
     private final DoubleSetting reachMargin =
             add(new DoubleSetting("aura", "reach_margin", 0.15, 0.0, 0.5, 0.01));
 
-    /** 目标渲染总开关；关掉后一格都不画（设置项还在，随时可以再开）。 */
+    /** 目标渲染总开关；关闭时让现有效果完成淡出。 */
     private final BoolSetting espEnabled =
             add(new BoolSetting("aura", "esp_enabled", true));
+    private final BoolSetting espThroughWalls =
+            add(new BoolSetting("aura", "esp_through_walls", true));
+    private final EspRenderer espRenderer = new EspRenderer();
     /** 渲染风格：声纳扫描 / 光环（加新风格只动 EspMode + EspRenderer）。 */
     private final EnumSetting<EspMode> espStyle =
             add(new EnumSetting<>("aura", "esp_style", EspMode.class, EspMode.HALO));
@@ -96,15 +99,15 @@ public final class Aura extends Module {
     /** 声纳波最大半径（格）。 */
     private final DoubleSetting espSonarRadius =
             add(new DoubleSetting("aura", "esp_sonar_radius", 2.0, 0.5, 4.0, 0.1));
-    /** 一次 ping 的周期（秒）：前 78% 从中心往外推，推到头之后整张网淡掉再重来。 */
+    /** 一次扫描周期（秒），前沿扩散后留下渐隐回波。 */
     private final DoubleSetting espSonarPeriod =
             add(new DoubleSetting("aura", "esp_sonar_period", 1.6, 0.8, 3.0, 0.1));
-    /** 同心圈的环距（格）：0.4 配 2 格半径 = 5 圈。 */
+    /** Surface grid spacing in blocks; existing config IDs remain compatible. */
     private final DoubleSetting espSonarSpacing =
-            add(new DoubleSetting("aura", "esp_sonar_spacing", 0.4, 0.15, 1.0, 0.05));
-    /** 辐条数量：从中心发散，各自角度/长度都带手绘式抖动。 */
+            add(new DoubleSetting("aura", "esp_sonar_spacing", 0.3, 0.1, 1.0, 0.05));
+    /** Shader grid detail; no extra geometry is emitted for finer grids. */
     private final DoubleSetting espSonarSpokes =
-            add(new DoubleSetting("aura", "esp_sonar_spokes", 8.0, 3.0, 24.0, 1.0));
+            add(new DoubleSetting("aura", "esp_sonar_spokes", 12.0, 3.0, 24.0, 1.0));
     /** 光环上下行程，占目标身高一半的比例（1 = 顶到头顶 / 脚底）。 */
     private final DoubleSetting espHaloAmplitude =
             add(new DoubleSetting("aura", "esp_halo_amplitude", 0.6, 0.0, 1.0, 0.05));
@@ -170,7 +173,7 @@ public final class Aura extends Module {
         group("attack", rotation, attackDelay, pauseEating);
         group("weapons", autoSwap, weaponType, switchMode, swapInventory, weaponCooldown);
         group("mace", maceSwap, maceFall, maceSpoof, maceSilent, maceSpoofHeight);
-        group("visuals", espEnabled, espStyle, espThickness, espSonarColor, espSonarRadius,
+        group("visuals", espEnabled, espStyle, espThroughWalls, espThickness, espSonarColor, espSonarRadius,
                 espSonarPeriod, espSonarSpacing, espSonarSpokes, espHaloColor, espHaloAmplitude, espHaloTrail);
 
         targets.description(() -> net.minecraft.text.Text.translatable(
@@ -224,8 +227,13 @@ public final class Aura extends Module {
                 "setting.yachiyoc.aura.esp_halo_amplitude.description"));
         espThickness.description(() -> net.minecraft.text.Text.translatable(
                 "setting.yachiyoc.aura.esp_thickness.description"));
+        espThroughWalls.description(() -> net.minecraft.text.Text.translatable("setting.yachiyoc.aura.esp_through_walls.description"));
+        espSonarPeriod.description(() -> net.minecraft.text.Text.translatable("setting.yachiyoc.aura.esp_sonar_period.description"));
+        espSonarSpacing.description(() -> net.minecraft.text.Text.translatable("setting.yachiyoc.aura.esp_sonar_spacing.description"));
+        espSonarSpokes.description(() -> net.minecraft.text.Text.translatable("setting.yachiyoc.aura.esp_sonar_spokes.description"));
         // 总开关关掉时整组收起；各自再只在对应风格下露出来
         espStyle.visibleWhen(espEnabled::get);
+        espThroughWalls.visibleWhen(espEnabled::get);
         espThickness.visibleWhen(espEnabled::get);
         espSonarColor.visibleWhen(() -> espEnabled.get() && espStyle.get() == EspMode.SONAR);
         espSonarRadius.visibleWhen(() -> espEnabled.get() && espStyle.get() == EspMode.SONAR);
@@ -298,6 +306,7 @@ public final class Aura extends Module {
     private void renderEsp() {
         Entity target = espTarget;
         if (target == null || target.isRemoved() || !enabled() || !espEnabled.get()) {
+            espRenderer.fadeOut();
             return;
         }
         RenderApi api = Render.api();
@@ -306,10 +315,10 @@ public final class Aura extends Module {
         }
         Vec3d lerped = target.getLerpedPos(api.tickDelta());
         Box box = target.getBoundingBox().offset(lerped.subtract(target.getEntityPos()));
-        // 渲染本身就是穿墙的（目标被方块挡住也要能看见），画完立刻关回去，别把别的模块也带成穿墙
-        api.throughWalls(true);
+        boolean previousThroughWalls = api.throughWalls();
+        api.throughWalls(espThroughWalls.get());
         try {
-            EspRenderer.render(espStyle.get(), box, new EspStyle(
+            espRenderer.render(espStyle.get(), box, new EspStyle(
                     espSonarColor.get(),
                     espHaloColor.get(),
                     espThickness.get().floatValue(),
@@ -318,9 +327,9 @@ public final class Aura extends Module {
                     espSonarSpacing.get().floatValue(),
                     (int) Math.round(espSonarSpokes.get()),
                     espHaloAmplitude.get().floatValue(),
-                    (int) Math.round(espHaloTrail.get())));
+                    (int) Math.round(espHaloTrail.get())), target.getId());
         } finally {
-            api.throughWalls(false);
+            api.throughWalls(previousThroughWalls);
         }
     }
 

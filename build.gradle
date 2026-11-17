@@ -81,3 +81,36 @@ java {
     targetCompatibility = JavaVersion.VERSION_21
     withSourcesJar()
 }
+
+tasks.register('sonarGeometryTest', JavaExec) {
+    dependsOn testClasses
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'dev.yachiyoc.render.esp.SonarGeometryTest'
+}
+
+tasks.register('nameTagLayoutTest', JavaExec) {
+    dependsOn testClasses
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'dev.yachiyoc.render.NameTagLayoutTest'
+}
+
+tasks.register('loadingAnimationTest', JavaExec) {
+    dependsOn testClasses
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'dev.yachiyoc.ui.loading.LoadingAnimationTest'
+    maxHeapSize = '384m'
+    systemProperty 'java.awt.headless', 'true'
+}
+
+tasks.named('test', Test) {
+    // These standalone mains have dedicated JavaExec tasks instead of framework test runners.
+    exclude 'dev/yachiyoc/render/esp/SonarGeometryTest.class'
+    exclude 'dev/yachiyoc/render/NameTagLayoutTest.class'
+    exclude 'dev/yachiyoc/ui/loading/LoadingAnimationTest.class'
+}
+
+tasks.named('check') {
+    dependsOn tasks.named('sonarGeometryTest')
+    dependsOn tasks.named('nameTagLayoutTest')
+    dependsOn tasks.named('loadingAnimationTest')
+}

@@ -192,6 +192,15 @@ public final class Render2D {
                 textureWidth, textureHeight, textureWidth, textureHeight, applyOpacity(0xFFFFFFFF));
     }
 
+    /** Atlas region with independent screen and source sizes, also available during startup. */
+    public static void textureRegion(DrawContext ctx, Identifier texture, float x, float y, float width, float height,
+                                     int u, int v, int regionWidth, int regionHeight, int atlasWidth, int atlasHeight) {
+        if (texture == null || width <= 0 || height <= 0) return;
+        ctx.drawTexture(RenderPipelines.GUI_TEXTURED, texture, Math.round(x), Math.round(y), u, v,
+                Math.max(1, Math.round(width)), Math.max(1, Math.round(height)), regionWidth, regionHeight,
+                atlasWidth, atlasHeight, applyOpacity(0xFFFFFFFF));
+    }
+
     /**
      * Difference/invert blend: the source is combined with whatever is already
      * in the GUI framebuffer. A white logo mask therefore becomes an inverted

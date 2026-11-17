@@ -66,6 +66,10 @@ public interface RenderApi {
     /** 画一个四边形（四个角按顺序给）。 */
     void quad(Vec3d a, Vec3d b, Vec3d c, Vec3d d, int color);
 
+    /** A surface shaded by a spherical sonar pulse; positions stay in world coordinates. */
+    void sonarQuad(Vec3d a, Vec3d b, Vec3d c, Vec3d d, Vec3d origin,
+                   float radius, float bandWidth, float gridSpacing, int detail, int color);
+
     /**
      * 在世界上贴一段正对镜头的文字。
      *
@@ -82,6 +86,12 @@ public interface RenderApi {
 
     /** 在世界上贴一块正对镜头的小方片（血条、底板都用它）。 */
     void billboardRect(Vec3d center, float width, float height, int color);
+
+    /** World units corresponding to one GUI pixel at the anchor's view depth. */
+    float billboardPixelSize(Vec3d anchor);
+
+    /** Rounded, antialiased label surface using the current depth mode. */
+    void billboardPanel(Vec3d center, float width, float height, int color);
 
     /** 在世界上画一个物品（3D 模型，和物品栏里一样）。{@code scale} 单位是方块。 */
     void item(net.minecraft.item.ItemStack stack, Vec3d pos, float scale);
