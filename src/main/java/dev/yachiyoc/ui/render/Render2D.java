@@ -51,6 +51,8 @@ public final class Render2D {
     private static final RenderPipeline COLOR_PLANE = effectPipeline("color_plane");
     private static final RenderPipeline HUE_BAR = effectPipeline("hue_bar");
     private static final RenderPipeline ALPHA_BAR = effectPipeline("alpha_bar");
+    private static final RenderPipeline MENU_SHADER = effectPipeline("menu_tidal_waltz");
+    private static final RenderPipeline MENU_VIDEO = effectPipeline("menu_video");
     private static final float[] OPACITY_STACK = new float[16];
     private static int opacityDepth;
     private static float opacity = 1;
@@ -148,6 +150,31 @@ public final class Render2D {
             ctx.drawTexture(pipeline, white, (int) x, (int) y, 0, 0,
                     (int) width, (int) height, 1, 1, 1, 1, controls);
         }
+    }
+
+    public static void menuShader(DrawContext context, long timeNanos) {
+        int width = context.getScaledWindowWidth();
+        int height = context.getScaledWindowHeight();
+        fill(context, 0, 0, width, height, 0xFF10152D);
+        int millis = (int) ((timeNanos / 1_000_000L) & 0xffffff);
+        effect(context, MENU_SHADER, 0, 0, width, height, 0xff000000 | millis);
+    }
+
+    public static void menuVideo(DrawContext context, Identifier texture, int sourceWidth, int sourceHeight,
+                                 int textureWidth, int textureHeight, int aspectWidth, int aspectHeight,
+                                 int rotation, int matrix, boolean fullRange) {
+        int screenWidth = context.getScaledWindowWidth();
+        int screenHeight = context.getScaledWindowHeight();
+        double aspect = (double) sourceWidth / sourceHeight;
+        if (aspectWidth > 0 && aspectHeight > 0) aspect *= (double) aspectWidth / aspectHeight;
+        int turns = Math.floorMod(rotation <= 3 ? rotation : rotation / 90, 4);
+        if ((turns & 1) != 0) aspect = 1 / aspect;
+        int width = Math.max(screenWidth, (int) Math.ceil(screenHeight * aspect));
+        int height = Math.max(screenHeight, (int) Math.ceil(screenWidth / aspect));
+        int controls = 0xff000000 | (matrix << 16) | (fullRange ? 0x100 : 0) | (turns << 2) | (textureWidth * 4 - sourceWidth);
+        context.drawTexture(MENU_VIDEO, texture, (screenWidth - width) / 2, (screenHeight - height) / 2, 0, 0,
+                width, height, textureWidth, textureHeight, textureWidth, textureHeight, controls);
+        fill(context, 0, 0, screenWidth, screenHeight, 0x25000000);
     }
 
     public static void colorPlane(DrawContext ctx, float x, float y, float width, float height, int hueColor) {

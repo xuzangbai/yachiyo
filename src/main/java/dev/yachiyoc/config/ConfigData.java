@@ -21,6 +21,9 @@ public final class ConfigData {
     public float guiHeight = 440.0F;
     /** auto | en_us | zh_cn */
     public String language = "zh_cn";
+    /** Library ID or absolute file path. Null picks the first entry, empty picks the built-in shader. */
+    public String menuBackgroundVideo;
+    public float menuBackgroundVolume = 0.1F;
     /** --debug 开着的功能名，默认空（全关）。 */
     public Set<String> debugFeatures = new LinkedHashSet<>();
 

@@ -92,6 +92,7 @@ public final class YachiyoC implements ClientModInitializer {
 
         Keybinds.init();
         Keybinds.apply(config.data().openKey);
+        dev.yachiyoc.ui.menuvideo.MenuBackground.registerScreenEntry();
 
         ClientLifecycleEvents.CLIENT_STARTED.register(YachiyoC::onClientStarted);
         ClientTickEvents.END_CLIENT_TICK.register(YachiyoC::onEndTick);
@@ -103,6 +104,7 @@ public final class YachiyoC implements ClientModInitializer {
     }
 
     private static void onEndTick(MinecraftClient client) {
+        dev.yachiyoc.ui.menuvideo.MenuBackground.tick(client);
         while (Keybinds.OPEN_GUI != null && Keybinds.OPEN_GUI.wasPressed()) {
             if (client.currentScreen == null) {
                 openClickGui();

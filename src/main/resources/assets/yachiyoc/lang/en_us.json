@@ -352,5 +352,21 @@
   "setting.yachiyoc.client.config.liquid_glass": "Liquid glass",
   "setting.yachiyoc.client.config.liquid_glass.description": "Translucent panels, soft background blur and pointer-responsive highlights. Blur follows the Minecraft menu background blur setting.",
   "setting.yachiyoc.client.config.glass_strength": "Glass strength",
-  "setting.yachiyoc.client.config.glass_strength.description": "Adjust panel transparency and edge highlights with a live preview."
+  "setting.yachiyoc.client.config.glass_strength.description": "Adjust panel transparency and edge highlights with a live preview.",
+  "ui.yachiyoc.menu_background.title": "Menu background",
+  "ui.yachiyoc.menu_background.shader": "Tidal Waltz",
+  "ui.yachiyoc.menu_background.procedural": "Built-in shader",
+  "ui.yachiyoc.menu_background.local_video": "Local video",
+  "ui.yachiyoc.menu_background.folder": "Open library",
+  "ui.yachiyoc.menu_background.folder_hint": "Create a subfolder in the library for your video and audio.",
+  "ui.yachiyoc.menu_background.volume": "Background volume %s",
+  "ui.yachiyoc.menu_background.refresh": "Rescan",
+  "ui.yachiyoc.menu_background.folder_failed": "Unable to open the video library folder",
+  "ui.yachiyoc.menu_background.drop_invalid": "Drop a supported video file",
+  "ui.yachiyoc.menu_background.choose": "Open video…",
+  "ui.yachiyoc.menu_background.opening": "Opening %s…",
+  "ui.yachiyoc.menu_background.playing": "%s×%s · %s FPS",
+  "ui.yachiyoc.menu_background.failed": "%s could not play. Using the built-in shader.",
+  "ui.yachiyoc.menu_background.unsupported": "This system uses the built-in shader background.",
+  "ui.yachiyoc.menu_background.picker_failed": "Unable to open the file picker. Drop a video onto this screen."
 }
