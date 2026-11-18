@@ -93,6 +93,7 @@ public final class YachiyoC implements ClientModInitializer {
         Keybinds.init();
         Keybinds.apply(config.data().openKey);
         dev.yachiyoc.ui.menuvideo.MenuBackground.registerScreenEntry();
+        dev.yachiyoc.ui.home.YachiyoHomeScreen.registerScreenEntry();
 
         ClientLifecycleEvents.CLIENT_STARTED.register(YachiyoC::onClientStarted);
         ClientTickEvents.END_CLIENT_TICK.register(YachiyoC::onEndTick);

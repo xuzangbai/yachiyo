@@ -10,6 +10,7 @@
     "ClientPlayNetworkHandlerMixin",
     "ClientPlayerEntityMixin",
     "ChatHudMixin",
+    "ClickableWidgetAccessor",
     "DecoderHandlerMixin",
     "FontManagerMixin",
     "GameRendererAccessor",

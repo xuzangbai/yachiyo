@@ -53,6 +53,7 @@ public final class Render2D {
     private static final RenderPipeline ALPHA_BAR = effectPipeline("alpha_bar");
     private static final RenderPipeline MENU_SHADER = effectPipeline("menu_tidal_waltz");
     private static final RenderPipeline MENU_VIDEO = effectPipeline("menu_video");
+    private static final RenderPipeline HOME_FLOW = effectPipeline("home_flow");
     private static final float[] OPACITY_STACK = new float[16];
     private static int opacityDepth;
     private static float opacity = 1;
@@ -158,6 +159,13 @@ public final class Render2D {
         fill(context, 0, 0, width, height, 0xFF10152D);
         int millis = (int) ((timeNanos / 1_000_000L) & 0xffffff);
         effect(context, MENU_SHADER, 0, 0, width, height, 0xff000000 | millis);
+    }
+
+    public static void homeFlow(DrawContext context, int width, int height, float anchor, long elapsedNanos) {
+        fill(context, 0, 0, width, height, Theme.HOME_BACKGROUND);
+        int phase = (int) (elapsedNanos / 2_000_000L) & 0xffff;
+        int center = Math.round(Math.clamp(anchor, 0, 1) * 255);
+        effect(context, HOME_FLOW, 0, 0, width, height, 0xff000000 | (phase << 8) | center);
     }
 
     public static void menuVideo(DrawContext context, Identifier texture, int sourceWidth, int sourceHeight,

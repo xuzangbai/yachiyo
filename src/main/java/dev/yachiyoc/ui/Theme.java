@@ -62,6 +62,13 @@ public final class Theme {
     public static int SHADOW = 0x33200030;
     public static int DANGER = 0xFFD85C7A;
 
+    public static final int HOME_BACKGROUND = 0xFF16102A;
+    public static final int HOME_PANEL = 0xDA211835;
+    public static final int HOME_PANEL_BORDER = 0x689C83C8;
+    public static final int HOME_BUTTON = 0x702B2047;
+    public static final int HOME_BUTTON_HOVER = 0xDF4C366C;
+    public static final int HOME_BUTTON_BORDER = 0x52B59AD9;
+
     public static int WINDOW_RADIUS = 28;
     public static final int PANEL_RADIUS = 22;
     public static int CARD_RADIUS = 20;

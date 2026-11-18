@@ -27,6 +27,10 @@ public final class UiTextures {
         return load("logo", "/assets/yachiyoc/textures/logo/logo.png");
     }
 
+    public static Identifier homeTitle() {
+        return load("home_title", "/assets/yachiyoc/textures/logo/home_title.png");
+    }
+
     /** White logo silhouette used by the difference/invert pipeline. */
     public static Identifier logoMask() {
         return load("logo_mask", "/assets/yachiyoc/textures/logo/logo_mask.png");

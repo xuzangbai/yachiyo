@@ -3,6 +3,7 @@ package dev.yachiyoc.ui.menuvideo;
 import dev.yachiyoc.YachiyoC;
 import dev.yachiyoc.platform.Debug;
 import dev.yachiyoc.ui.anim.Anim;
+import dev.yachiyoc.ui.home.YachiyoHomeScreen;
 import dev.yachiyoc.ui.render.Render2D;
 import net.fabricmc.fabric.api.client.screen.v1.ScreenEvents;
 import net.minecraft.client.MinecraftClient;
@@ -47,7 +48,8 @@ public final class MenuBackground {
 
     public static void registerScreenEntry() {
         ScreenEvents.AFTER_INIT.register((client, screen, width, height) -> {
-            if (client.world == null && (screen instanceof TitleScreen || screen instanceof OptionsScreen)) {
+            if (client.currentScreen == screen && client.world == null
+                    && (screen instanceof TitleScreen || screen instanceof OptionsScreen)) {
                 MenuBackgroundPanel.install(screen, width, height);
             }
         });
@@ -55,7 +57,7 @@ public final class MenuBackground {
 
     public static boolean isLobby(MinecraftClient client) {
         var screen = client.currentScreen;
-        return client.world == null && screen != null && !(screen instanceof ConnectScreen
+        return client.world == null && screen != null && !(screen instanceof YachiyoHomeScreen || screen instanceof ConnectScreen
                 || screen instanceof DisconnectedScreen || screen instanceof ProgressScreen
                 || screen instanceof ReconfiguringScreen || screen instanceof TaskScreen
                 || screen instanceof CreditsScreen);
