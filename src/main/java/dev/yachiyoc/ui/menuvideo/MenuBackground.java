@@ -5,6 +5,7 @@ import dev.yachiyoc.platform.Debug;
 import dev.yachiyoc.ui.anim.Anim;
 import dev.yachiyoc.ui.home.YachiyoHomeScreen;
 import dev.yachiyoc.ui.render.Render2D;
+import dev.yachiyoc.ui.render.Render2D.MenuScene;
 import net.fabricmc.fabric.api.client.screen.v1.ScreenEvents;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.DrawContext;
@@ -29,6 +30,7 @@ public final class MenuBackground {
     private static final String PREFIX = "ui.yachiyoc.menu_background.";
     private static final Anim VIDEO_SHADE = new Anim(0);
 
+    private static MenuScene scene = MenuScene.TIDAL_WALTZ;
     private static boolean activated;
     private static boolean awaitingFrame;
     private static MenuVideoLibrary.Entry selected;
@@ -49,21 +51,27 @@ public final class MenuBackground {
     public static void registerScreenEntry() {
         ScreenEvents.AFTER_INIT.register((client, screen, width, height) -> {
             if (client.currentScreen == screen && client.world == null
-                    && (screen instanceof TitleScreen || screen instanceof OptionsScreen)) {
+                    && (screen instanceof TitleScreen || screen instanceof YachiyoHomeScreen || screen instanceof OptionsScreen)) {
                 MenuBackgroundPanel.install(screen, width, height);
             }
         });
     }
 
+    // Older configurations chose the classic lobby and the custom home background independently.
+    private static boolean usesOriginalHome(MinecraftClient client) {
+        return client.currentScreen instanceof YachiyoHomeScreen && YachiyoC.config().data().menuBackgroundScene == null;
+    }
+
     public static boolean isLobby(MinecraftClient client) {
         var screen = client.currentScreen;
-        return client.world == null && screen != null && !(screen instanceof YachiyoHomeScreen || screen instanceof ConnectScreen
+        return client.world == null && screen != null && !usesOriginalHome(client) && !(screen instanceof ConnectScreen
                 || screen instanceof DisconnectedScreen || screen instanceof ProgressScreen
                 || screen instanceof ReconfiguringScreen || screen instanceof TaskScreen
                 || screen instanceof CreditsScreen);
     }
 
     static boolean isSelected(MenuVideoLibrary.Entry entry) {
+        if (usesOriginalHome(MinecraftClient.getInstance())) return entry == null;
         return entry == null ? selected == null : selected != null && selected.id().equals(entry.id());
     }
 
@@ -79,12 +87,27 @@ public final class MenuBackground {
         return videos().stream().filter(entry -> saved == null || entry.id().equals(saved)).findFirst().orElse(null);
     }
 
+    static MenuScene scene() {
+        return usesOriginalHome(MinecraftClient.getInstance()) ? MenuScene.HOME_FLOW : scene;
+    }
+
+    static void selectScene(MenuScene choice) {
+        select(null, choice);
+    }
+
     static void select(MenuVideoLibrary.Entry entry) {
-        boolean same = activated && failure == null && isSelected(entry)
+        select(entry, scene());
+    }
+
+    private static void select(MenuVideoLibrary.Entry entry, MenuScene choice) {
+        boolean same = activated && failure == null && !usesOriginalHome(MinecraftClient.getInstance()) && isSelected(entry)
                 && (entry == null || selected.clips().equals(entry.clips()) && Objects.equals(selected.audio(), entry.audio()));
         String id = entry == null ? "" : entry.id();
-        if (!id.equals(YachiyoC.config().data().menuBackgroundVideo)) {
-            YachiyoC.config().data().menuBackgroundVideo = id;
+        var settings = YachiyoC.config().data();
+        scene = choice;
+        if (!id.equals(settings.menuBackgroundVideo) || !choice.id.equals(settings.menuBackgroundScene)) {
+            settings.menuBackgroundVideo = id;
+            settings.menuBackgroundScene = choice.id;
             YachiyoC.config().save();
         }
         if (same) return;
@@ -109,6 +132,7 @@ public final class MenuBackground {
     public static void draw(DrawContext context) {
         if (!activated) {
             activated = true;
+            scene = MenuScene.fromId(YachiyoC.config().data().menuBackgroundScene);
             selected = initialVideo();
             if (selected == null || !selected.id().equals(textureVideoId)) clearTexture();
             open(selected);
@@ -130,7 +154,13 @@ public final class MenuBackground {
             if (awaitingFrame) {
                 context.fill(0, 0, context.getScaledWindowWidth(), context.getScaledWindowHeight(), 0xFF10152D);
             } else {
-                Render2D.menuShader(context, now);
+                if (scene == MenuScene.HOME_FLOW && MinecraftClient.getInstance().currentScreen instanceof YachiyoHomeScreen home) {
+                    home.renderBackground(context, 0, 0, 0);
+                } else if (scene == MenuScene.HOME_FLOW) {
+                    Render2D.homeFlow(context, context.getScaledWindowWidth(), context.getScaledWindowHeight(), 0.5F, now);
+                } else {
+                    Render2D.menuShader(context, scene, now);
+                }
             }
         } else {
             var format = texture.format;
@@ -174,8 +204,7 @@ public final class MenuBackground {
     }
 
     static Text status() {
-        if (!videosSupported()) return Text.translatable(PREFIX + "unsupported");
-        if (selected == null) return Text.translatable(PREFIX + "shader");
+        if (isSelected(null)) return Text.translatable(PREFIX + "scene." + scene().id);
         if (failure != null) return Text.translatable(PREFIX + "failed", selected.name());
         if (awaitingFrame || texture == null) return Text.translatable(PREFIX + "opening", selected.name());
         return Text.translatable(PREFIX + "playing", texture.format.width(), texture.format.height(),

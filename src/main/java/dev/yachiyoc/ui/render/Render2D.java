@@ -51,9 +51,31 @@ public final class Render2D {
     private static final RenderPipeline COLOR_PLANE = effectPipeline("color_plane");
     private static final RenderPipeline HUE_BAR = effectPipeline("hue_bar");
     private static final RenderPipeline ALPHA_BAR = effectPipeline("alpha_bar");
-    private static final RenderPipeline MENU_SHADER = effectPipeline("menu_tidal_waltz");
     private static final RenderPipeline MENU_VIDEO = effectPipeline("menu_video");
-    private static final RenderPipeline HOME_FLOW = effectPipeline("home_flow");
+    public enum MenuScene {
+        AURORA("aurora", 0xFF78E1B7),
+        CAUSTICS("caustics", 0xFF46D6DD),
+        STAR_ORBITS("star_orbits", 0xFFACA0F5),
+        MOLTEN_GOLD("molten_gold", 0xFFFFBE66),
+        OCEAN_WAVES("ocean_waves", 0xFF82BDD1),
+        TIDAL_WALTZ("tidal_waltz", 0xFFC59CCA),
+        HOME_FLOW("home_flow", 0xFFE5AAD8);
+
+        public final String id;
+        public final int color;
+        private final RenderPipeline pipeline;
+
+        MenuScene(String id, int color) {
+            this.id = id;
+            this.color = color;
+            this.pipeline = effectPipeline(id.equals("home_flow") ? id : "menu_" + id);
+        }
+
+        public static MenuScene fromId(String id) {
+            for (MenuScene scene : values()) if (scene.id.equals(id)) return scene;
+            return TIDAL_WALTZ;
+        }
+    }
     private static final float[] OPACITY_STACK = new float[16];
     private static int opacityDepth;
     private static float opacity = 1;
@@ -153,19 +175,19 @@ public final class Render2D {
         }
     }
 
-    public static void menuShader(DrawContext context, long timeNanos) {
+    public static void menuShader(DrawContext context, MenuScene scene, long timeNanos) {
         int width = context.getScaledWindowWidth();
         int height = context.getScaledWindowHeight();
         fill(context, 0, 0, width, height, 0xFF10152D);
         int millis = (int) ((timeNanos / 1_000_000L) & 0xffffff);
-        effect(context, MENU_SHADER, 0, 0, width, height, 0xff000000 | millis);
+        effect(context, scene.pipeline, 0, 0, width, height, 0xff000000 | millis);
     }
 
     public static void homeFlow(DrawContext context, int width, int height, float anchor, long elapsedNanos) {
         fill(context, 0, 0, width, height, Theme.HOME_BACKGROUND);
         int phase = (int) (elapsedNanos / 2_000_000L) & 0xffff;
         int center = Math.round(Math.clamp(anchor, 0, 1) * 255);
-        effect(context, HOME_FLOW, 0, 0, width, height, 0xff000000 | (phase << 8) | center);
+        effect(context, MenuScene.HOME_FLOW.pipeline, 0, 0, width, height, 0xff000000 | (phase << 8) | center);
     }
 
     public static void menuVideo(DrawContext context, Identifier texture, int sourceWidth, int sourceHeight,

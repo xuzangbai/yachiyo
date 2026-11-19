@@ -4,6 +4,7 @@ import dev.yachiyoc.YachiyoC;
 
 import dev.yachiyoc.ui.anim.Anim;
 import dev.yachiyoc.ui.render.Render2D;
+import dev.yachiyoc.ui.render.Render2D.MenuScene;
 import net.fabricmc.fabric.api.client.screen.v1.ScreenEvents;
 import net.fabricmc.fabric.api.client.screen.v1.ScreenKeyboardEvents;
 import net.fabricmc.fabric.api.client.screen.v1.ScreenMouseEvents;
@@ -45,7 +46,7 @@ public final class MenuBackgroundPanel extends ClickableWidget {
     private List<OrderedText> folderHint = List.of();
     private int panelX, panelY, panelWidth, panelHeight, rows, scroll;
     private int keyboardIndex = -1;
-    private boolean keyboardOpen, dismissed;
+    private boolean keyboardOpen, dismissed, videoTab;
     private long lastInside;
     private Text error;
 
@@ -81,39 +82,58 @@ public final class MenuBackgroundPanel extends ClickableWidget {
         var renderer = MinecraftClient.getInstance().textRenderer;
         panelWidth = Math.min(Math.min(250, screenWidth - 28), Math.max(184, screenWidth * 3 / 7));
         panelX = getX() - panelWidth - 4;
-        folderHint = renderer.wrapLines(Text.translatable(KEY + "folder_hint"), panelWidth - 24);
-        boolean showVolume = library.stream().anyMatch(entry -> entry.audio() != null);
-        int fixedHeight = 138 + folderHint.size() * (renderer.fontHeight + 2) + (showVolume ? 22 : 0);
-        rows = Math.clamp(Math.min(library.size(), (screenHeight - fixedHeight - 12) / ROW_HEIGHT), 1, 8);
-        panelHeight = fixedHeight + rows * ROW_HEIGHT;
+        boolean showVolume = videoTab && library.stream().anyMatch(entry -> entry.audio() != null);
+        folderHint = videoTab ? renderer.wrapLines(Text.translatable(KEY + "folder_hint"), panelWidth - 24) : List.of();
+        int fixedHeight = 130 + folderHint.size() * (renderer.fontHeight + 2) + (showVolume ? 22 : 0);
+        int availableRows = Math.clamp((screenHeight - fixedHeight - 12) / ROW_HEIGHT, 1, 8);
+        rows = Math.min(library.size(), availableRows);
+        MenuScene[] scenes = MenuScene.values();
+        int sceneRows = (scenes.length + 1) / 2;
+        panelHeight = videoTab ? fixedHeight + rows * ROW_HEIGHT : 106 + 24 * sceneRows;
         panelY = Math.max(6, (screenHeight - panelHeight) / 2);
         scroll = Math.clamp(scroll, 0, Math.max(0, library.size() - rows));
         controls.clear();
         int x = panelX + 12;
         int contentWidth = panelWidth - 24;
-        int firstRow = panelY + 53;
-        button(x, firstRow, contentWidth, 24, Text.translatable(KEY + "shader"), Text.translatable(KEY + "procedural"),
-                () -> MenuBackground.isSelected(null), () -> select(null));
-        for (int i = 0; i < rows && scroll + i < library.size(); i++) {
-            var entry = library.get(scroll + i);
-            String file = entry.clips().getLast().getFileName().toString();
-            Text detail = entry.id().equals(entry.clips().getLast().toString()) ? Text.translatable(KEY + "local_video") : Text.literal(file);
-            button(x, firstRow + ROW_HEIGHT * (i + 1), contentWidth, 24, Text.literal(entry.name()), detail,
-                    () -> MenuBackground.isSelected(entry), () -> select(entry));
-        }
-        int footer = panelY + 84 + rows * ROW_HEIGHT;
-        if (showVolume) {
-            controls.add(new VolumeSlider(x, footer, contentWidth));
-            footer += 22;
-        }
         int half = (contentWidth - 6) / 2;
-        button(x, footer, half, 18, Text.translatable(KEY + "folder"), null, () -> false, this::openFolder)
-                .active = MenuBackground.videosSupported();
-        button(x + half + 6, footer, contentWidth - half - 6, 18, Text.translatable(KEY + "refresh"),
-                null, () -> false, this::refresh).active = MenuBackground.videosSupported();
-        button(x, footer + 22, contentWidth - 60, 18, Text.translatable(KEY + "choose"), null,
-                () -> false, this::chooseVideo).active = MenuBackground.videosSupported();
-        button(x + contentWidth - 54, footer + 22, 54, 18, Text.translatable("gui.done"), null, () -> false, this::dismiss);
+        button(x, panelY + 45, half, 19, Text.translatable(KEY + "procedural"), null,
+                () -> !videoTab, () -> showTab(false));
+        button(x + half + 6, panelY + 45, contentWidth - half - 6, 19, Text.translatable(KEY + "videos"), null,
+                () -> videoTab, () -> showTab(true)).active = MenuBackground.videosSupported();
+
+        int firstRow = panelY + 72;
+        if (videoTab) {
+            for (int i = 0; i < rows; i++) {
+                var entry = library.get(scroll + i);
+                String file = entry.clips().getLast().getFileName().toString();
+                Text detail = entry.id().equals(entry.clips().getLast().toString()) ? Text.translatable(KEY + "local_video") : Text.literal(file);
+                button(x, firstRow + ROW_HEIGHT * i, contentWidth, 24, Text.literal(entry.name()), detail,
+                        () -> MenuBackground.isSelected(entry), () -> select(entry));
+            }
+            int footer = firstRow + rows * ROW_HEIGHT + 3;
+            if (showVolume) {
+                controls.add(new VolumeSlider(x, footer, contentWidth));
+                footer += 22;
+            }
+            button(x, footer, half, 18, Text.translatable(KEY + "folder"), null, () -> false, this::openFolder);
+            button(x + half + 6, footer, contentWidth - half - 6, 18, Text.translatable(KEY + "refresh"),
+                    null, () -> false, this::refresh);
+            button(x, footer + 22, contentWidth - 60, 18, Text.translatable(KEY + "choose"), null,
+                    () -> false, this::chooseVideo);
+            button(x + contentWidth - 54, footer + 22, 54, 18, Text.translatable("gui.done"), null, () -> false, this::dismiss);
+        } else {
+            for (int i = 0; i < scenes.length; i++) {
+                MenuScene scene = scenes[i];
+                int column = i % 2;
+                var tile = button(x + column * (half + 6), firstRow + (i / 2) * 24, half, 20,
+                        Text.translatable(KEY + "scene." + scene.id), null,
+                        () -> MenuBackground.isSelected(null) && MenuBackground.scene() == scene,
+                        () -> { error = null; MenuBackground.selectScene(scene); });
+                tile.swatch = scene.color;
+            }
+            button(x + contentWidth - 54, firstRow + sceneRows * 24 + 4, 54, 18,
+                    Text.translatable("gui.done"), null, () -> false, this::dismiss);
+        }
         if (keyboardOpen) {
             if (keyboardIndex >= 0 && keyboardIndex < controls.size() && controls.get(keyboardIndex).active) {
                 focusControl(keyboardIndex);
@@ -133,6 +153,14 @@ public final class MenuBackgroundPanel extends ClickableWidget {
     private void select(MenuVideoLibrary.Entry entry) {
         error = null;
         MenuBackground.select(entry);
+    }
+
+    private void showTab(boolean videos) {
+        if (videoTab == videos) return;
+        error = null;
+        videoTab = videos;
+        keyboardIndex = videos ? 1 : 0;
+        layout();
     }
 
     private void refresh() {
@@ -166,6 +194,7 @@ public final class MenuBackgroundPanel extends ClickableWidget {
     private void dropFiles(List<Path> paths) {
         var file = paths.stream().filter(MenuVideoLibrary::isVideo).findFirst();
         if (file.isPresent()) {
+            videoTab = true;
             select(MenuVideoLibrary.Entry.file(file.get()));
             refresh();
         } else {
@@ -179,6 +208,7 @@ public final class MenuBackgroundPanel extends ClickableWidget {
 
     private void open() {
         if (library == null) {
+            videoTab = !MenuBackground.isSelected(null);
             library = MenuBackground.videos();
             layout();
         }
@@ -239,7 +269,7 @@ public final class MenuBackgroundPanel extends ClickableWidget {
     private boolean handleScroll(double x, double y, double amount) {
         if (draggedVolume != null) return true;
         if (reveal.value() <= 0.02f || !containsDrawer(x, y, drawerShift())) return false;
-        if (reveal.target() == 1 && amount != 0 && library.size() > rows) {
+        if (videoTab && reveal.target() == 1 && amount != 0 && library.size() > rows) {
             scroll = Math.clamp(scroll - (int) Math.signum(amount), 0, library.size() - rows);
             layout();
         }
@@ -334,11 +364,10 @@ public final class MenuBackgroundPanel extends ClickableWidget {
             Text status = error == null ? MenuBackground.status() : error;
             context.drawTextWithShadow(textRenderer, fit(status, panelWidth - 24), x, panelY + 29,
                     Render2D.applyOpacity(error == null ? 0xFFB9CBE5 : 0xFFFFCAB8));
-            Render2D.horizontalLine(context, x, panelY + 44, panelWidth - 24, 0x386E83A4);
-            if (library.size() > rows) {
+            if (videoTab && library.size() > rows) {
                 float ratio = (float) rows / library.size();
                 int barHeight = Math.max(7, Math.round(rows * ROW_HEIGHT * ratio));
-                int start = panelY + 81 + Math.round((rows * ROW_HEIGHT - barHeight)
+                int start = panelY + 72 + Math.round((rows * ROW_HEIGHT - barHeight)
                         * (float) scroll / (library.size() - rows));
                 Render2D.roundedRect(context, panelX + panelWidth - 8, start, 2, barHeight, 1, 0xFF7799C8);
             }
@@ -388,6 +417,7 @@ public final class MenuBackgroundPanel extends ClickableWidget {
     }
 
     static final class Control extends ClickableWidget {
+        private int swatch;
         private final Text detail;
         private final BooleanSupplier selected;
         private final Runnable action;
@@ -410,7 +440,11 @@ public final class MenuBackgroundPanel extends ClickableWidget {
             Render2D.roundedBox(context, getX(), getY(), getWidth(), getHeight(), 6, edge, fill);
             var renderer = MinecraftClient.getInstance().textRenderer;
             int labelColor = Render2D.applyOpacity(active ? 0xFFF2F6FE : 0xFF8292AB);
-            if (detail == null) {
+            if (swatch != 0) {
+                Render2D.roundedRect(context, getX() + 5, getY() + 5, 3, getHeight() - 10, 1.5F, swatch);
+                context.drawTextWithShadow(renderer, fit(getMessage(), getWidth() - 15), getX() + 11,
+                        getY() + (getHeight() - renderer.fontHeight) / 2, labelColor);
+            } else if (detail == null) {
                 context.drawCenteredTextWithShadow(renderer, fit(getMessage(), getWidth() - 8),
                         getX() + getWidth() / 2, getY() + (getHeight() - 8) / 2, labelColor);
             } else {
