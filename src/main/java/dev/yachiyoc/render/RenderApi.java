@@ -1,5 +1,6 @@
 package dev.yachiyoc.render;
 
+import dev.yachiyoc.render.balloon.BalloonPhysics;
 import net.minecraft.client.render.VertexConsumerProvider;
 import net.minecraft.client.util.math.MatrixStack;
 import net.minecraft.text.Text;
@@ -69,6 +70,10 @@ public interface RenderApi {
     /** A surface shaded by a spherical sonar pulse; positions stay in world coordinates. */
     void sonarQuad(Vec3d a, Vec3d b, Vec3d c, Vec3d d, Vec3d origin,
                    float radius, float bandWidth, float gridSpacing, int detail, int color);
+
+    void balloon(BalloonPhysics.Frame frame, Vec3d wrist, float light);
+
+    void balloonBurst(Vec3d center, double radius, float age, float light);
 
     /**
      * 在世界上贴一段正对镜头的文字。

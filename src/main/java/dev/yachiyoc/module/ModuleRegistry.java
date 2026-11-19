@@ -8,6 +8,7 @@ import dev.yachiyoc.module.impl.client.Config;
 import dev.yachiyoc.module.impl.combat.Aura;
 import dev.yachiyoc.module.impl.misc.Example;
 import dev.yachiyoc.module.impl.misc.ViaFix;
+import dev.yachiyoc.module.impl.render.HandRender;
 import dev.yachiyoc.module.impl.render.NameTags;
 import dev.yachiyoc.module.setting.Setting;
 
@@ -34,6 +35,7 @@ public final class ModuleRegistry {
         register(new StubModule("autotool", ModuleCategory.PLAYER));
         register(new StubModule("scaffold", ModuleCategory.WORLD));
         register(new NameTags());
+        register(new HandRender());
         register(new StubModule("toolbox", ModuleCategory.TOOLS));
         register(new Config());
         register(new Colors());

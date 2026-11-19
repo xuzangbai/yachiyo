@@ -1,5 +1,6 @@
 package dev.yachiyoc.mixin;
 
+import dev.yachiyoc.module.impl.render.HandRender;
 import dev.yachiyoc.platform.MinecraftClientAccessor;
 import dev.yachiyoc.ui.home.YachiyoHomeScreen;
 import net.minecraft.client.MinecraftClient;
@@ -16,6 +17,7 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.ModifyVariable;
 import org.spongepowered.asm.mixin.injection.Slice;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 @Mixin(MinecraftClient.class)
 public abstract class MinecraftClientMixin implements MinecraftClientAccessor {
@@ -38,5 +40,12 @@ public abstract class MinecraftClientMixin implements MinecraftClientAccessor {
     @Inject(method = "setOverlay", at = @At("HEAD"))
     private void yachiyoc$releaseLoadingOverlay(Overlay overlay, CallbackInfo ci) {
         if (((MinecraftClient) (Object) this).getOverlay() != overlay) LoadingScreenRenderer.overlayChanging();
+    }
+
+    @Inject(method = "doAttack", at = @At("HEAD"), cancellable = true)
+    private void yachiyoc$hitLocalBalloon(CallbackInfoReturnable<Boolean> cir) {
+        HandRender hand = HandRender.active();
+        // A handled press also suppresses vanilla's held-button block breaking on this tick.
+        if (hand != null && hand.attack((MinecraftClient) (Object) this)) cir.setReturnValue(true);
     }
 }

@@ -2,11 +2,15 @@ package dev.yachiyoc.mixin;
 
 import dev.yachiyoc.YachiyoC;
 import dev.yachiyoc.module.Module;
+import dev.yachiyoc.render.v1_21_11.BalloonWrist;
+import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.render.command.OrderedRenderCommandQueue;
 import net.minecraft.client.render.entity.PlayerEntityRenderer;
 import net.minecraft.client.render.entity.state.PlayerEntityRenderState;
 import net.minecraft.client.render.state.CameraRenderState;
 import net.minecraft.client.util.math.MatrixStack;
+import net.minecraft.util.Arm;
+import net.minecraft.util.Identifier;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
@@ -20,6 +24,22 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
  */
 @Mixin(PlayerEntityRenderer.class)
 public abstract class EntityRendererMixin {
+    @Inject(method = "renderRightArm", at = @At("TAIL"))
+    private void yachiyoc$rightWrist(MatrixStack matrices, OrderedRenderCommandQueue queue, int light,
+                                     Identifier skin, boolean sleeve, CallbackInfo ci) {
+        var model = ((PlayerEntityRenderer<?>) (Object) this).getModel();
+        var client = MinecraftClient.getInstance();
+        BalloonWrist.captureArm(client, Arm.RIGHT, model.rightArm, matrices, queue, light);
+    }
+
+    @Inject(method = "renderLeftArm", at = @At("TAIL"))
+    private void yachiyoc$leftWrist(MatrixStack matrices, OrderedRenderCommandQueue queue, int light,
+                                    Identifier skin, boolean sleeve, CallbackInfo ci) {
+        var model = ((PlayerEntityRenderer<?>) (Object) this).getModel();
+        var client = MinecraftClient.getInstance();
+        BalloonWrist.captureArm(client, Arm.LEFT, model.leftArm, matrices, queue, light);
+    }
+
     @Inject(
             method = "renderLabelIfPresent(Lnet/minecraft/client/render/entity/state/PlayerEntityRenderState;"
                     + "Lnet/minecraft/client/util/math/MatrixStack;"

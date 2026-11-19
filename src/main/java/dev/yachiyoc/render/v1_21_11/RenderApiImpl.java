@@ -6,6 +6,7 @@ import com.mojang.blaze3d.platform.DepthTestFunction;
 import dev.yachiyoc.render.RenderApi;
 import dev.yachiyoc.render.ShapeMode;
 import dev.yachiyoc.render.NameTagLayout;
+import dev.yachiyoc.render.balloon.BalloonPhysics;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.font.TextRenderer;
 import net.minecraft.client.gl.RenderPipelines;
@@ -130,6 +131,16 @@ public final class RenderApiImpl implements RenderApi {
     /** 画四边形时该用哪一层：穿墙模式换掉深度测试，其余完全一样。 */
     private RenderLayer quads() {
         return throughWalls ? THROUGH_WALL_QUADS : RenderLayers.debugQuads();
+    }
+
+    @Override
+    public void balloon(BalloonPhysics.Frame frame, Vec3d wrist, float light) {
+        if (inWorld) BalloonMesh.draw(matrices.peek(), consumers, cameraPos(), frame, wrist, light);
+    }
+
+    @Override
+    public void balloonBurst(Vec3d center, double radius, float age, float light) {
+        if (inWorld) BalloonMesh.drawBurst(matrices.peek(), consumers, cameraPos(), center, radius, age, light);
     }
 
     @Override
