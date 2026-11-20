@@ -1,9 +1,12 @@
 package dev.yachiyoc.module.impl.client;
 
+import dev.yachiyoc.YachiyoC;
+
 import dev.yachiyoc.module.Module;
 import dev.yachiyoc.module.ModuleCategory;
 import dev.yachiyoc.module.setting.ColorSetting;
 import dev.yachiyoc.module.setting.BoolSetting;
+import dev.yachiyoc.module.setting.ButtonSetting;
 import dev.yachiyoc.module.setting.DoubleSetting;
 import dev.yachiyoc.module.setting.EnumSetting;
 import dev.yachiyoc.module.setting.FontSetting;
@@ -14,6 +17,8 @@ import dev.yachiyoc.rotation.RotationMode;
 import dev.yachiyoc.ui.render.Text2D;
 import dev.yachiyoc.ui.UiStyle;
 import dev.yachiyoc.ui.loading.LoadingPreferences;
+import dev.yachiyoc.ui.home.YachiyoHomeScreen;
+import dev.yachiyoc.ui.menuvideo.MenuBackgroundSettingsScreen;
 import net.minecraft.text.Text;
 
 /**
@@ -22,6 +27,12 @@ import net.minecraft.text.Text;
  */
 public final class Config extends Module {
     public final BoolSetting smoothMotion = add(new BoolSetting("client.config", "smooth_motion", true));
+    public final ButtonSetting menuBackground = add(new ButtonSetting(
+            "client.config", "menu_background", MenuBackgroundSettingsScreen::open));
+    public final ButtonSetting homeLayout = add(new ButtonSetting(
+            "client.config", "home_layout", YachiyoHomeScreen::toggleLayout,
+            () -> Text.translatable(YachiyoC.config().data().vanillaHomeScreen
+                    ? "ui.yachiyoc.home.layout.vanilla" : "ui.yachiyoc.home.layout.yachiyo")));
     public final BoolSetting liquidGlass = add(new BoolSetting("client.config", "liquid_glass", true));
     public final DoubleSetting glassStrength = add(new DoubleSetting(
             "client.config", "glass_strength", 0.65, 0.1, 1.0, 0.05));
@@ -48,7 +59,9 @@ public final class Config extends Module {
         UiStyle.configure(smoothMotion, liquidGlass, glassStrength);
         LoadingPreferences.configure(loadingAnimation, loadingSound, loadingVolume);
         glassStrength.visibleWhen(liquidGlass::get);
-        group("appearance", smoothMotion, liquidGlass, glassStrength, font);
+        group("appearance", smoothMotion, menuBackground, homeLayout, liquidGlass, glassStrength, font);
+        homeLayout.description(() -> Text.translatable("setting.yachiyoc.client.config.home_layout.description"));
+        menuBackground.description(() -> Text.translatable("setting.yachiyoc.client.config.menu_background.description"));
         group("loading", loadingAnimation, loadingSound, loadingVolume);
         loadingSound.visibleWhen(loadingAnimation::get);
         loadingVolume.visibleWhen(() -> loadingAnimation.get() && loadingSound.get());

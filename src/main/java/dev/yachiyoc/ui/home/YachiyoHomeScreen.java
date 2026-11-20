@@ -58,9 +58,12 @@ public final class YachiyoHomeScreen extends Screen {
     }
 
     public static Screen route(Screen screen) {
+        if (YachiyoC.config() == null) return screen;
+        if (YachiyoC.config().data().vanillaHomeScreen) {
+            return screen instanceof YachiyoHomeScreen home ? home.classic : screen;
+        }
         // Leave title subclasses owned by other mods in control of their own layout.
-        if (screen != null && screen.getClass() == TitleScreen.class && YachiyoC.config() != null
-                && !YachiyoC.config().data().vanillaHomeScreen) {
+        if (screen != null && screen.getClass() == TitleScreen.class) {
             return new YachiyoHomeScreen((TitleScreen) screen);
         }
         return screen;
@@ -75,9 +78,17 @@ public final class YachiyoHomeScreen extends Screen {
         });
     }
 
-    private static void switchHome(MinecraftClient client, Screen classic, boolean useClassic) {
+    public static void toggleLayout() {
+        setClassicLayout(!YachiyoC.config().data().vanillaHomeScreen);
+    }
+
+    private static void setClassicLayout(boolean useClassic) {
         YachiyoC.config().data().vanillaHomeScreen = useClassic;
         YachiyoC.config().save();
+    }
+
+    private static void switchHome(MinecraftClient client, Screen classic, boolean useClassic) {
+        setClassicLayout(useClassic);
         client.setScreen(classic);
     }
 

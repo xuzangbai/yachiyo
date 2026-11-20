@@ -52,7 +52,7 @@ public final class MenuBackground {
         ScreenEvents.AFTER_INIT.register((client, screen, width, height) -> {
             if (client.currentScreen == screen && client.world == null
                     && (screen instanceof TitleScreen || screen instanceof YachiyoHomeScreen || screen instanceof OptionsScreen)) {
-                MenuBackgroundPanel.install(screen, width, height);
+                MenuBackgroundPanel.install(screen, width, height, null);
             }
         });
     }
@@ -64,6 +64,7 @@ public final class MenuBackground {
 
     public static boolean isLobby(MinecraftClient client) {
         var screen = client.currentScreen;
+        if (screen instanceof MenuBackgroundSettingsScreen) return true;
         return client.world == null && screen != null && !usesOriginalHome(client) && !(screen instanceof ConnectScreen
                 || screen instanceof DisconnectedScreen || screen instanceof ProgressScreen
                 || screen instanceof ReconfiguringScreen || screen instanceof TaskScreen
@@ -129,14 +130,17 @@ public final class MenuBackground {
         }
     }
 
+    static void activate() {
+        if (activated) return;
+        activated = true;
+        scene = MenuScene.fromId(YachiyoC.config().data().menuBackgroundScene);
+        selected = initialVideo();
+        if (selected == null || !selected.id().equals(textureVideoId)) clearTexture();
+        open(selected);
+    }
+
     public static void draw(DrawContext context) {
-        if (!activated) {
-            activated = true;
-            scene = MenuScene.fromId(YachiyoC.config().data().menuBackgroundScene);
-            selected = initialVideo();
-            if (selected == null || !selected.id().equals(textureVideoId)) clearTexture();
-            open(selected);
-        }
+        activate();
         long now = System.nanoTime();
         var player = playback;
         if (player != null) {

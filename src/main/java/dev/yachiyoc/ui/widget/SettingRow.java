@@ -209,14 +209,14 @@ public final class SettingRow {
                     : Text.literal(Text2D.trim(Text.literal(bind.displayValue()), 64).getString());
             Text2D.drawCentered(ctx, shown, pillX + 35.0F, pillY + 3.0F,
                     bind.listening() ? Theme.TEXT : Theme.TEXT_DIM, false);
-        } else if (setting instanceof ButtonSetting) {
+        } else if (setting instanceof ButtonSetting button) {
             float buttonX = x + width - 74.0F;
             float buttonY = y + 4.0F;
             int fill = Render2D.mix(Render2D.withAlpha(accent, 0.22F),
                     Render2D.withAlpha(accent, 0.38F), hover.value());
             Render2D.roundedBox(ctx, buttonX, buttonY, 46.0F, 16.0F, 6.0F,
                     Render2D.withAlpha(accent, 0.55F), fill);
-            Text2D.drawCentered(ctx, Text.translatable("ui.yachiyoc.run"),
+            Text2D.drawCentered(ctx, button.caption(),
                     buttonX + 23.0F, buttonY + 4.0F, Theme.TEXT, false);
         }
 

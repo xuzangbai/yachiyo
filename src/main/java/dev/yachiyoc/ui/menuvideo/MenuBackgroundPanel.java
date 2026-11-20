@@ -39,6 +39,7 @@ public final class MenuBackgroundPanel extends ClickableWidget {
     private static final int ROW_HEIGHT = 28;
     private static final long LEAVE_DELAY = 120_000_000L;
     private final int screenWidth, screenHeight;
+    private final Runnable closeSettings;
     private final Anim reveal = new Anim(0);
     private final List<ClickableWidget> controls = new ArrayList<>();
     private VolumeSlider draggedVolume;
@@ -50,14 +51,15 @@ public final class MenuBackgroundPanel extends ClickableWidget {
     private long lastInside;
     private Text error;
 
-    private MenuBackgroundPanel(int width, int height) {
+    private MenuBackgroundPanel(int width, int height, Runnable closeSettings) {
         super(width - 12, height / 2 - 13, 12, 26, Text.translatable(KEY + "title"));
         screenWidth = width;
         screenHeight = height;
+        this.closeSettings = closeSettings;
     }
 
-    static void install(Screen screen, int width, int height) {
-        var panel = new MenuBackgroundPanel(width, height);
+    static void install(Screen screen, int width, int height, Runnable closeSettings) {
+        var panel = new MenuBackgroundPanel(width, height, closeSettings);
         Screens.getButtons(screen).add(panel);
         ScreenEvents.afterRender(screen).register((current, context, x, y, delta) -> panel.renderDrawer(context, x, y, delta));
         ScreenMouseEvents.allowMouseClick(screen).register((current, click) -> !panel.handleClick(click));
@@ -66,6 +68,11 @@ public final class MenuBackgroundPanel extends ClickableWidget {
         ScreenMouseEvents.allowMouseScroll(screen).register((current, x, y, horizontal, vertical) -> !panel.handleScroll(x, y, vertical));
         ScreenKeyboardEvents.allowKeyPress(screen).register((current, input) -> !panel.handleDrawerKeys(input));
         ScreenEvents.remove(screen).register(current -> panel.commitVolume());
+        if (closeSettings != null) {
+            panel.visible = false; // The settings page opens the drawer directly.
+            panel.keyboardOpen = true;
+            panel.open();
+        }
     }
 
     public static boolean acceptFileDrop(Screen screen, List<Path> paths) {
@@ -218,6 +225,10 @@ public final class MenuBackgroundPanel extends ClickableWidget {
 
     private void dismiss() {
         commitVolume();
+        if (closeSettings != null) {
+            closeSettings.run();
+            return;
+        }
         keyboardOpen = false;
         dismissed = true;
         focusControl(-1);
@@ -232,7 +243,7 @@ public final class MenuBackgroundPanel extends ClickableWidget {
         if (isMouseOver(click.x(), click.y())) return false;
         int shift = drawerShift();
         if (reveal.value() <= 0.02f || !containsDrawer(click.x(), click.y(), shift)) {
-            if (keyboardOpen) dismiss();
+            if (keyboardOpen && closeSettings == null) dismiss();
             return false;
         }
         if (reveal.target() == 1) {
