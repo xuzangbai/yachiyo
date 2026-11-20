@@ -58,6 +58,8 @@ public final class Render2D {
         STAR_ORBITS("star_orbits", 0xFFACA0F5),
         MOLTEN_GOLD("molten_gold", 0xFFFFBE66),
         OCEAN_WAVES("ocean_waves", 0xFF82BDD1),
+        MENGER_SPONGE("menger_sponge", 0xFFE1A562),
+        TESSERACT("tesseract", 0xFFA8ADFF),
         TIDAL_WALTZ("tidal_waltz", 0xFFC59CCA),
         HOME_FLOW("home_flow", 0xFFE5AAD8);
 
