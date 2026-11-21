@@ -1,8 +1,11 @@
 package dev.yachiyoc.mixin;
 
+import dev.yachiyoc.module.impl.combat.PacketMine;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.network.ClientPlayNetworkHandler;
 import net.minecraft.client.network.ClientPlayerEntity;
+import net.minecraft.network.packet.s2c.play.BlockUpdateS2CPacket;
+import net.minecraft.network.packet.s2c.play.ChunkDeltaUpdateS2CPacket;
 import net.minecraft.network.packet.s2c.play.InventoryS2CPacket;
 import net.minecraft.network.packet.s2c.play.ScreenHandlerSlotUpdateS2CPacket;
 import net.minecraft.screen.ScreenHandler;
@@ -23,6 +26,18 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
  */
 @Mixin(ClientPlayNetworkHandler.class)
 public abstract class ClientPlayNetworkHandlerMixin {
+    @Inject(method = "onBlockUpdate", at = @At("TAIL"))
+    private void yachiyoc$onBlockUpdate(BlockUpdateS2CPacket packet, CallbackInfo ci) {
+        PacketMine mine = PacketMine.active();
+        if (mine != null) mine.onServerBlockUpdate(packet.getPos(), packet.getState());
+    }
+
+    @Inject(method = "onChunkDeltaUpdate", at = @At("TAIL"))
+    private void yachiyoc$onChunkDeltaUpdate(ChunkDeltaUpdateS2CPacket packet, CallbackInfo ci) {
+        PacketMine mine = PacketMine.active();
+        if (mine != null) packet.visitUpdates(mine::onServerBlockUpdate);
+    }
+
     @Inject(method = "onScreenHandlerSlotUpdate", at = @At("TAIL"))
     private void yachiyoc$syncRevision(ScreenHandlerSlotUpdateS2CPacket packet, CallbackInfo ci) {
         yachiyoc$applyRevision(packet.getSyncId(), packet.getRevision());

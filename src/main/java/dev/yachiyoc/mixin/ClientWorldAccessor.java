@@ -6,7 +6,7 @@ import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.gen.Invoker;
 
 @Mixin(ClientWorld.class)
-public interface LeavesMineClientWorldAccessor {
+public interface ClientWorldAccessor {
     @Invoker("getPendingUpdateManager")
-    PendingUpdateManager yachiyoc$getLeavesMinePendingUpdates();
+    PendingUpdateManager yachiyoc$getPendingUpdateManager();
 }

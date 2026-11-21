@@ -38,6 +38,7 @@ public final class RotationManager {
     private static float targetPitch;
     private static Runnable pendingAction;
     private static boolean applied;
+    private static boolean rotateOnSend;
 
     private static boolean hachimiActive;
     private static float hachimiYaw;
@@ -122,11 +123,25 @@ public final class RotationManager {
             return;
         }
 
+        scheduleMovement(player, mode, yaw, pitch, action, false);
+    }
+
+    /** Applies the aim only while sending movement and runs the action on the next tick. */
+    public static boolean runAfterMovementAim(float yaw, float pitch, Runnable action) {
+        ClientPlayerEntity player = MinecraftClient.getInstance().player;
+        if (player == null || hasPendingAttack()) return false;
+        scheduleMovement(player, RotationMode.DELAY_MOVEMENT, yaw, pitch, action, true);
+        return true;
+    }
+
+    private static void scheduleMovement(ClientPlayerEntity player, RotationMode mode, float yaw, float pitch,
+                                         Runnable action, boolean rotateOnSend) {
         // 同一 tick 内重复请求时不要覆盖“相机原始角度”，否则恢复时视角会停在上一刀的瞄准角。
-        boolean carryOver = pending && !applied;
+        boolean carryOver = pending && !applied && !RotationManager.rotateOnSend;
         pending = true;
         applied = false;
         pendingMode = mode;
+        RotationManager.rotateOnSend = rotateOnSend;
         if (!carryOver) {
             oldYaw = player.getYaw();
             oldPitch = player.getPitch();
@@ -134,7 +149,7 @@ public final class RotationManager {
         targetYaw = yaw;
         targetPitch = MathHelper.clamp(pitch, -90.0F, 90.0F);
         pendingAction = action;
-        if (mode == RotationMode.DELAY_MOVEMENT) {
+        if (mode == RotationMode.DELAY_MOVEMENT && !rotateOnSend) {
             // 延迟移动：本 tick 的移动包就要带上瞄准角，所以先写实体 yaw。
             player.setYaw(targetYaw);
             player.setPitch(targetPitch);
@@ -242,7 +257,12 @@ public final class RotationManager {
             return;
         }
         applied = true;
-        // 实体 yaw 已经在 run() 里写成瞄准角（延迟移动），这里不需要再动。
+        if (rotateOnSend) {
+            oldYaw = player.getYaw();
+            oldPitch = player.getPitch();
+            player.setYaw(targetYaw);
+            player.setPitch(targetPitch);
+        }
     }
 
     private static void syncClientRotation(ClientPlayerEntity player) {
@@ -285,7 +305,7 @@ public final class RotationManager {
     }
 
     public static void clearAim() {
-        if (pending && !applied && pendingMode == RotationMode.DELAY_MOVEMENT) {
+        if (pending && !applied && !rotateOnSend && pendingMode == RotationMode.DELAY_MOVEMENT) {
             // 请求还没过 sendMovementPackets 就被取消（例如同一 tick 里模块被关掉），
             // 这里必须把实体角度还原，否则视角会永远停在瞄准角。
             MinecraftClient client = MinecraftClient.getInstance();
@@ -329,13 +349,12 @@ public final class RotationManager {
             hachimiAction = null;
         }
         if (pending && !applied) {
-            // 本 tick 没有走到 sendMovementPackets（骑乘载具走的是载具分支），不能再等：
-            // 把实体角度还原掉，动作直接补发，避免视角卡在瞄准角、整刀被丢掉。
+            // 骑乘时可能跳过 sendMovementPackets。只在发包时转向的动作等下一次请求。
             MinecraftClient client = MinecraftClient.getInstance();
             ClientPlayerEntity player = client.player;
-            Runnable action = pendingAction;
+            Runnable action = rotateOnSend ? null : pendingAction;
             RotationMode mode = pendingMode;
-            if (player != null && mode == RotationMode.DELAY_MOVEMENT) {
+            if (player != null && mode == RotationMode.DELAY_MOVEMENT && !rotateOnSend) {
                 player.setYaw(oldYaw);
                 player.setPitch(oldPitch);
             }

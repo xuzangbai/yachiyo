@@ -3,10 +3,10 @@ package dev.yachiyoc.module;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonPrimitive;
 import dev.yachiyoc.config.ConfigData;
-import dev.yachiyoc.leavesmine.LeavesPacketMine;
 import dev.yachiyoc.module.impl.client.Colors;
 import dev.yachiyoc.module.impl.client.Config;
 import dev.yachiyoc.module.impl.combat.Aura;
+import dev.yachiyoc.module.impl.combat.PacketMine;
 import dev.yachiyoc.module.impl.misc.Example;
 import dev.yachiyoc.module.impl.misc.ViaFix;
 import dev.yachiyoc.module.impl.render.HandRender;
@@ -32,7 +32,7 @@ public final class ModuleRegistry {
 
     public void bootstrap() {
         register(new Aura());
-        register(new LeavesPacketMine());
+        register(new PacketMine());
         register(new StubModule("sprint", ModuleCategory.MOVEMENT));
         register(new StubModule("autotool", ModuleCategory.PLAYER));
         register(new StubModule("scaffold", ModuleCategory.WORLD));
